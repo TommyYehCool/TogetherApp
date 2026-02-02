@@ -25,6 +25,7 @@ dependencies:
   
   # 工具
   geolocator: ^10.1.0
+  geocoding: ^3.0.0
   permission_handler: ^11.1.0
   intl: ^0.18.1
 

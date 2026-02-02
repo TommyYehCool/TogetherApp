@@ -22,11 +22,55 @@ Together 是一個以地圖為核心的即時活動發現與媒合平台，幫�
 
 ## 🚀 快速開始
 
-### 1️⃣ 檢查環境
+### 1️⃣ 安裝依賴
 ```bash
-# Windows 使用者
-check_environment.bat
+flutter pub get
 ```
+
+### 2️⃣ 啟動應用程式
+
+#### 方法 1：使用啟動腳本（推薦）
+```bash
+# Windows - 固定使用 port 8080
+run_web.bat
+```
+
+#### 方法 2：使用命令列
+```bash
+# Web (Chrome) - 固定 port 8080
+flutter run -d chrome --web-port=8080
+
+# Android
+flutter run -d android
+
+# iOS (需要 Mac)
+flutter run -d ios
+```
+
+#### 方法 3：使用 VS Code
+1. 按 F5 或點擊「Run and Debug」
+2. 選擇「Flutter Web (Port 8080)」
+3. 自動在 Chrome 開啟 http://localhost:8080
+
+### 3️⃣ 設定 API Token（可選）
+1. 打開應用程式
+2. 點擊右上角頭像 → 設定
+3. 輸入 Bearer Token
+4. 測試連線
+
+**注意：** 如果沒有 Token，應用程式會使用 Mock 資料模式
+
+### 4️⃣ 後端 CORS 設定
+如果要連接真實後端，需要允許以下網域：
+```
+http://localhost:8080
+```
+
+詳細設定請參考：`docs/05-設計規範/CORS_SETUP_GUIDE.md`
+
+---
+
+## 📖 文件導覽
 
 ### 2️⃣ 安裝依賴
 ```bash

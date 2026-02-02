@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import '../services/activity_service.dart';
+import 'location_picker_dialog.dart';
 
 class CreateActivityDialog extends StatefulWidget {
   final LatLng initialPosition;
@@ -24,11 +25,17 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
   
   String _selectedCategory = '社交';
   int _maxParticipants = 5;
-  DateTime _selectedDateTime = DateTime.now().add(const Duration(hours: 1));
+  late LatLng _selectedLocation;
 
   final List<String> _categories = [
     '社交', '運動', '學習', '美食', '旅遊', '音樂', '藝術', '其他'
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedLocation = widget.initialPosition;
+  }
 
   @override
   void dispose() {
@@ -42,6 +49,22 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
 
     final service = context.read<ActivityService>();
     
+    // 檢查 Token 狀態
+    final token = service.apiService.currentToken;
+    print('\n========== 準備建立活動 ==========');
+    print('Token 狀態: ${token != null && token.isNotEmpty ? "已設定 (${token.substring(0, 20)}...)" : "❌ 未設定"}');
+    
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('請先到設定頁面輸入 Bearer Token'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+    
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -53,26 +76,25 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
     final activity = await service.createActivity(
       title: _titleController.text,
       description: _descriptionController.text,
-      latitude: widget.initialPosition.latitude,
-      longitude: widget.initialPosition.longitude,
-      startTime: _selectedDateTime,
+      latitude: _selectedLocation.latitude,
+      longitude: _selectedLocation.longitude,
       maxParticipants: _maxParticipants,
-      category: _selectedCategory,
+      activityType: _selectedCategory,
     );
 
     if (mounted) {
       Navigator.pop(context); // 關閉載入對話框
       
       if (activity != null) {
-        widget.onActivityCreated();
-        Navigator.pop(context); // 關閉建立對話框
-        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('活動建立成功！'),
+            content: Text('✅ 活動建立成功！'),
             backgroundColor: Color(0xFF00D0DD),
           ),
         );
+        
+        widget.onActivityCreated();
+        Navigator.pop(context); // 關閉建立對話框
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -217,40 +239,30 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
 
                     const SizedBox(height: 20),
 
-                    // 開始時間
+                    // 活動地點
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.access_time, color: Color(0xFF00D0DD)),
-                      title: const Text('開始時間'),
+                      leading: const Icon(Icons.location_on, color: Color(0xFF00D0DD)),
+                      title: const Text('活動地點'),
                       subtitle: Text(
-                        '${_selectedDateTime.month}/${_selectedDateTime.day} ${_selectedDateTime.hour}:${_selectedDateTime.minute.toString().padLeft(2, '0')}',
+                        '緯度: ${_selectedLocation.latitude.toStringAsFixed(4)}, 經度: ${_selectedLocation.longitude.toStringAsFixed(4)}',
+                        style: const TextStyle(fontSize: 12),
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: _selectedDateTime,
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime.now().add(const Duration(days: 30)),
+                        final result = await Navigator.push<LatLng>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => LocationPickerDialog(
+                              initialPosition: _selectedLocation,
+                            ),
+                          ),
                         );
                         
-                        if (date != null && mounted) {
-                          final time = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay.fromDateTime(_selectedDateTime),
-                          );
-                          
-                          if (time != null) {
-                            setState(() {
-                              _selectedDateTime = DateTime(
-                                date.year,
-                                date.month,
-                                date.day,
-                                time.hour,
-                                time.minute,
-                              );
-                            });
-                          }
+                        if (result != null) {
+                          setState(() {
+                            _selectedLocation = result;
+                          });
                         }
                       },
                     ),

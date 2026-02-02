@@ -159,42 +159,140 @@ class ActivityDetailPanel extends StatelessWidget {
                   color: Colors.white,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withAlpha(13),
                       blurRadius: 10,
                       offset: const Offset(0, -2),
                     ),
                   ],
                 ),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: activity.isFull
-                        ? null
-                        : () => _joinActivity(context, activity.id),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00D0DD),
-                      disabledBackgroundColor: Colors.grey[300],
-                      shape: RoundedRectangleBorder(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: activity.isFull
+                              ? null
+                              : () => _joinActivity(context, activity.id),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF00D0DD),
+                            disabledBackgroundColor: Colors.grey[300],
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: Text(
+                            activity.isFull ? '已額滿' : '加入活動',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // 評分按鈕
+                    Container(
+                      height: 56,
+                      width: 56,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00D0DD).withAlpha(26),
                         borderRadius: BorderRadius.circular(28),
                       ),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      activity.isFull ? '已額滿' : '加入活動',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                      child: IconButton(
+                        onPressed: () => _showRatingDialog(context, activity.id),
+                        icon: const Icon(Icons.star_border),
+                        color: const Color(0xFF00D0DD),
+                        iconSize: 28,
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ],
           ),
         );
       },
+    );
+  }
+
+  void _showRatingDialog(BuildContext context, String activityId) {
+    int rating = 5;
+    final commentController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('評分活動'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('請為這個活動評分'),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) {
+                  return IconButton(
+                    icon: Icon(
+                      index < rating ? Icons.star : Icons.star_border,
+                      color: Colors.amber,
+                      size: 32,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        rating = index + 1;
+                      });
+                    },
+                  );
+                }),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: commentController,
+                decoration: const InputDecoration(
+                  labelText: '評論（選填）',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final service = context.read<ActivityService>();
+                // 將 String ID 轉換為 int
+                final success = await service.rateActivity(
+                  int.parse(activityId),
+                  rating,
+                );
+                
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(success ? '評分成功！' : '評分失敗'),
+                      backgroundColor: success ? const Color(0xFF00D0DD) : Colors.red,
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00D0DD),
+              ),
+              child: const Text('提交'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -226,7 +324,7 @@ class ActivityDetailPanel extends StatelessWidget {
       ),
     );
 
-    final success = await service.joinActivity(activityId);
+    final success = await service.joinActivity(int.parse(activityId));
     
     if (context.mounted) {
       Navigator.pop(context); // 關閉載入對話框

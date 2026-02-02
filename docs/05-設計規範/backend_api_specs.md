@@ -103,7 +103,8 @@ Content-Type: application/json
   "start_time": "2023-10-27T14:00:00Z",
   "max_participants": 5,
   "latitude": 25.0330,
-  "longitude": 121.5654
+  "longitude": 121.5654,
+  "category": "學習"
 }
 ```
 
@@ -116,6 +117,7 @@ Content-Type: application/json
 | max_participants | int | 是 | 最大參與人數 |
 | latitude | float | 是 | 活動地點緯度 |
 | longitude | float | 是 | 活動地點經度 |
+| category | string | 是 | 活動類別（社交/運動/學習/美食/旅遊/音樂/藝術/其他） |
 
 **回應範例** (201 Created):
 ```json

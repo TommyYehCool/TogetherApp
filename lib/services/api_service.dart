@@ -6,19 +6,44 @@ class ApiService {
   final String baseUrl;
   String? _authToken;
 
+  // 固定的測試 Token（開發用）
+  static const String _devToken = ''; // 請在設定頁面輸入你的 Token
+
   ApiService({String? baseUrl})
       : baseUrl = baseUrl ?? 'https://helpful-noticeably-bullfrog.ngrok-free.app',
         _dio = Dio(BaseOptions(
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
         )) {
+    // 預設使用開發 Token
+    _authToken = _devToken;
+    
     // 設定攔截器，自動加入 Token
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
-        if (_authToken != null) {
+        // 如果有 Token 就加入 Authorization header
+        if (_authToken != null && _authToken!.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $_authToken';
+          print('使用 Token: ${_authToken!.substring(0, 20)}...');
+        } else {
+          print('警告: 沒有設定 Token，API 可能會失敗');
         }
+        // 加入 ngrok 需要的 header（如果使用 ngrok）
+        options.headers['ngrok-skip-browser-warning'] = 'true';
+        print('API 請求: ${options.method} ${options.uri}');
         return handler.next(options);
+      },
+      onResponse: (response, handler) {
+        print('API 回應: ${response.statusCode} ${response.requestOptions.uri}');
+        return handler.next(response);
+      },
+      onError: (error, handler) {
+        print('API 錯誤: ${error.message}');
+        if (error.response != null) {
+          print('狀態碼: ${error.response?.statusCode}');
+          print('回應: ${error.response?.data}');
+        }
+        return handler.next(error);
       },
     ));
   }
@@ -26,7 +51,17 @@ class ApiService {
   // 設定認證 Token
   void setAuthToken(String token) {
     _authToken = token;
+    print('Token 已設定: ${token.substring(0, 10)}...');
   }
+
+  // 清除 Token
+  void clearAuthToken() {
+    _authToken = null;
+    print('Token 已清除');
+  }
+
+  // 取得當前 Token
+  String? get currentToken => _authToken;
 
   // 取得附近活動
   Future<List<Activity>> getNearbyActivities({
@@ -35,22 +70,50 @@ class ApiService {
     int radiusMeters = 5000,
   }) async {
     try {
+      print('\n========== 取得附近活動 ==========');
+      print('位置: ($latitude, $longitude)');
+      print('範圍: $radiusMeters 公尺');
+      
       final response = await _dio.get(
         '$baseUrl/activities/nearby',
         queryParameters: {
           'lat': latitude,
           'lng': longitude,
-          'radius': radiusMeters,
+          'radius_meters': radiusMeters,
         },
       );
 
+      print('附近活動回應狀態: ${response.statusCode}');
+      print('附近活動回應資料: ${response.data}');
+
       if (response.statusCode == 200) {
         final List<dynamic> data = response.data;
-        return data.map((json) => Activity.fromJson(json)).toList();
+        print('找到 ${data.length} 個附近活動');
+        
+        final activities = <Activity>[];
+        for (var i = 0; i < data.length; i++) {
+          try {
+            final activity = Activity.fromJson(data[i]);
+            activities.add(activity);
+            print('  [$i] ${activity.title} at (${activity.latitude}, ${activity.longitude})');
+          } catch (e) {
+            print('  [$i] 解析失敗: $e');
+            print('  原始資料: ${data[i]}');
+          }
+        }
+        
+        print('成功解析 ${activities.length} 個活動');
+        print('========== 取得完成 ==========\n');
+        return activities;
       }
       return [];
     } catch (e) {
-      print('API 錯誤，使用 Mock 資料: $e');
+      print('❌ API 錯誤: $e');
+      if (e is DioException && e.response != null) {
+        print('錯誤回應: ${e.response?.data}');
+      }
+      print('使用 Mock 資料');
+      print('========== 使用 Mock ==========\n');
       // API 未就緒時返回 Mock 資料
       return _getMockActivities(latitude, longitude);
     }
@@ -62,29 +125,78 @@ class ApiService {
     required String description,
     required double latitude,
     required double longitude,
-    required DateTime startTime,
     required int maxParticipants,
-    required String category,
+    required String activityType,
   }) async {
+    print('\n========== 建立活動開始 ==========');
+    print('Token 狀態: ${_authToken != null && _authToken!.isNotEmpty ? "已設定" : "未設定"}');
+    
     try {
+      print('建立活動 API 請求:');
+      print('URL: $baseUrl/activities/');
+      print('Data: {');
+      print('  title: $title,');
+      print('  description: $description,');
+      print('  lat: $latitude,');
+      print('  lng: $longitude,');
+      print('  max_slots: $maxParticipants,');
+      print('  activity_type: $activityType');
+      print('}');
+      
+      print('\n發送 HTTP POST 請求...');
+      
       final response = await _dio.post(
         '$baseUrl/activities/',
         data: {
           'title': title,
           'description': description,
-          'start_time': startTime.toIso8601String(),
-          'max_participants': maxParticipants,
-          'latitude': latitude,
-          'longitude': longitude,
+          'lat': latitude,
+          'lng': longitude,
+          'max_slots': maxParticipants,
+          'activity_type': activityType,
         },
       );
 
+      print('✅ 建立活動回應: ${response.statusCode}');
+      print('回應資料: ${response.data}');
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return Activity.fromJson(response.data);
+        // 後端只回傳 {"status": "success", "activity_id": 9}
+        // 需要建立本地 Activity 物件
+        final activityId = response.data['activity_id'];
+        
+        print('活動建立成功，ID: $activityId');
+        print('========== 建立活動成功 ==========\n');
+        
+        return Activity(
+          id: activityId.toString(),
+          title: title,
+          description: description,
+          latitude: latitude,
+          longitude: longitude,
+          startTime: DateTime.now(),
+          maxParticipants: maxParticipants,
+          currentParticipants: 1,
+          category: activityType,
+          hostId: 'current_user',
+          hostName: '我',
+          isBoosted: false,
+        );
       }
       return null;
     } catch (e) {
-      print('建立活動失敗，使用 Mock 模式: $e');
+      print('\n❌ 建立活動失敗: $e');
+      if (e is DioException) {
+        print('錯誤類型: ${e.type}');
+        print('錯誤訊息: ${e.message}');
+        if (e.response != null) {
+          print('回應狀態碼: ${e.response?.statusCode}');
+          print('回應資料: ${e.response?.data}');
+        } else {
+          print('⚠️ 沒有收到伺服器回應 - 可能是網路問題或 CORS 錯誤');
+        }
+      }
+      print('========== 使用 Mock 資料 ==========\n');
       
       // API 失敗時，建立 Mock 活動
       return Activity(
@@ -93,10 +205,10 @@ class ApiService {
         description: description,
         latitude: latitude,
         longitude: longitude,
-        startTime: startTime,
+        startTime: DateTime.now(),
         maxParticipants: maxParticipants,
         currentParticipants: 1,
-        category: category,
+        category: activityType,
         hostId: 'mock_user',
         hostName: '我',
         isBoosted: false,
@@ -104,20 +216,82 @@ class ApiService {
     }
   }
 
-  // 加入活動
-  Future<bool> joinActivity(String activityId) async {
+  // 搜尋活動（新增）
+  Future<List<Activity>> searchActivities({
+    String? query,
+    String? activityType,
+    bool onlyAvailable = true,
+    int limit = 20,
+    int offset = 0,
+  }) async {
     try {
+      print('\n========== 搜尋活動 ==========');
+      print('關鍵字: $query');
+      print('類型: $activityType');
+      print('只顯示可參加: $onlyAvailable');
+      
+      final response = await _dio.get(
+        '$baseUrl/activities/search',
+        queryParameters: {
+          if (query != null) 'query': query,
+          if (activityType != null) 'activity_type': activityType,
+          'only_available': onlyAvailable,
+          'limit': limit,
+          'offset': offset,
+        },
+      );
+
+      print('搜尋回應狀態: ${response.statusCode}');
+      print('搜尋回應資料: ${response.data}');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = response.data;
+        print('找到 ${data.length} 個活動');
+        
+        final activities = <Activity>[];
+        for (var i = 0; i < data.length; i++) {
+          try {
+            final activity = Activity.fromJson(data[i]);
+            activities.add(activity);
+            print('  [$i] ${activity.title} - ${activity.category}');
+          } catch (e) {
+            print('  [$i] 解析失敗: $e');
+            print('  原始資料: ${data[i]}');
+          }
+        }
+        
+        print('成功解析 ${activities.length} 個活動');
+        print('========== 搜尋完成 ==========\n');
+        return activities;
+      }
+      return [];
+    } catch (e) {
+      print('❌ 搜尋活動失敗: $e');
+      if (e is DioException && e.response != null) {
+        print('錯誤回應: ${e.response?.data}');
+      }
+      print('========== 搜尋失敗 ==========\n');
+      return [];
+    }
+  }
+  // 加入活動
+  Future<bool> joinActivity(int activityId) async {
+    try {
+      print('申請加入活動 ID: $activityId');
       final response = await _dio.post('$baseUrl/activities/$activityId/join');
+      print('加入活動回應: ${response.statusCode}');
       return response.statusCode == 200;
     } catch (e) {
-      print('加入活動失敗，使用 Mock 模式: $e');
-      // Mock 模式下直接返回成功
-      return true;
+      print('加入活動失敗: $e');
+      if (e is DioException && e.response != null) {
+        print('錯誤回應: ${e.response?.data}');
+      }
+      return false;
     }
   }
 
   // 取得活動的加入請求（Host 專用）
-  Future<List<Map<String, dynamic>>> getActivityRequests(String activityId) async {
+  Future<List<Map<String, dynamic>>> getActivityRequests(int activityId) async {
     try {
       final response = await _dio.get('$baseUrl/activities/$activityId/requests');
       if (response.statusCode == 200) {
@@ -131,7 +305,7 @@ class ApiService {
   }
 
   // 批准加入請求（Host 專用）
-  Future<bool> approveJoinRequest(String requestId) async {
+  Future<bool> approveJoinRequest(int requestId) async {
     try {
       final response = await _dio.put('$baseUrl/activities/requests/$requestId/approve');
       return response.statusCode == 200;
@@ -141,14 +315,13 @@ class ApiService {
     }
   }
 
-  // 評分活動
-  Future<bool> rateActivity(String activityId, int score, String comment) async {
+  // 評分活動（只需要 score，不需要 comment）
+  Future<bool> rateActivity(int activityId, int score) async {
     try {
       final response = await _dio.post(
         '$baseUrl/activities/$activityId/rate',
         data: {
           'score': score,
-          'comment': comment,
         },
       );
       return response.statusCode == 200;
@@ -159,9 +332,14 @@ class ApiService {
   }
 
   // Boost 活動
-  Future<bool> boostActivity(String activityId) async {
+  Future<bool> boostActivity(int activityId, {int days = 1}) async {
     try {
-      final response = await _dio.post('$baseUrl/activities/$activityId/mock-boost');
+      final response = await _dio.post(
+        '$baseUrl/activities/$activityId/mock-boost',
+        queryParameters: {
+          'days': days,
+        },
+      );
       return response.statusCode == 200;
     } catch (e) {
       print('Boost 失敗: $e');
