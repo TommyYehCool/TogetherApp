@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../services/activity_service.dart';
+import '../models/activity.dart';
 
 class ActivityDetailPanel extends StatelessWidget {
-  const ActivityDetailPanel({super.key});
+  final VoidCallback? onClose; // 新增：關閉回調
+  
+  const ActivityDetailPanel({super.key, this.onClose});
 
   @override
   Widget build(BuildContext context) {
@@ -16,6 +19,14 @@ class ActivityDetailPanel extends StatelessWidget {
           return const SizedBox.shrink();
         }
 
+        // 調試信息
+        print('\n========== ActivityDetailPanel ==========');
+        print('活動: ${activity.title}');
+        print('開始時間: ${activity.startTime}');
+        print('結束時間: ${activity.endTime}');
+        print('isOngoing: ${activity.isOngoing}');
+        print('========================================\n');
+
         return Container(
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -23,14 +34,40 @@ class ActivityDetailPanel extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // 拖曳指示器
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
+              // 頂部列：拖曳指示器 + 關閉按鈕
+              SizedBox(
+                height: 48, // 給 Stack 一個固定高度
+                child: Stack(
+                  children: [
+                    // 拖曳指示器（置中）
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 12),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    // 關閉按鈕（右上角）
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: IconButton(
+                        icon: const Icon(Icons.close, size: 24),
+                        color: Colors.grey[600],
+                        onPressed: onClose, // 使用回調
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -43,6 +80,29 @@ class ActivityDetailPanel extends StatelessWidget {
                       // 標題與類別
                       Row(
                         children: [
+                          // LIVE 標籤（如果活動正在進行中）
+                          if (activity.isOngoing) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF4D4F),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Text(
+                                'LIVE',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
@@ -93,35 +153,35 @@ class ActivityDetailPanel extends StatelessWidget {
 
                       const SizedBox(height: 16),
 
-                      // 活動標題
-                      Text(
-                        activity.title,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF2D3436),
-                        ),
-                      ),
+                      // 活動標題（使用跑馬燈效果）
+                      _buildMarqueeTitle(activity.title),
 
                       const SizedBox(height: 24),
 
-                      // 時間
+                      // 1. 標題 + LIVE/類別 tag（已在上方）
+
+                      // 2. 時間（開始/結束）
                       _buildInfoRow(
                         Icons.access_time,
-                        DateFormat('MM/dd HH:mm').format(activity.startTime),
+                        '${DateFormat('MM/dd HH:mm').format(activity.startTime.subtract(const Duration(hours: 8)).toLocal())}',
                       ),
+                      if (activity.endTime != null) ...[
+                        const SizedBox(height: 4),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 32),
+                          child: Text(
+                            '至 ${DateFormat('MM/dd HH:mm').format(activity.endTime!.subtract(const Duration(hours: 8)).toLocal())}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ),
+                      ],
 
                       const SizedBox(height: 12),
 
-                      // 人數
-                      _buildInfoRow(
-                        Icons.people,
-                        '${activity.currentParticipants}/${activity.maxParticipants} 人',
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      // 地點（地區 + 地址）
+                      // 3. 地點（店名或地址，並顯示距離）
                       _buildInfoRow(
                         Icons.location_on,
                         activity.region != null && activity.region!.isNotEmpty
@@ -131,17 +191,14 @@ class ActivityDetailPanel extends StatelessWidget {
 
                       const SizedBox(height: 12),
 
-                      // 主辦人
-                      _buildInfoRow(
-                        Icons.person,
-                        '主辦人：${activity.hostName}',
-                      ),
+                      // 4. 人數進度（進度條或 0/5）
+                      _buildParticipantProgress(activity),
 
                       const SizedBox(height: 24),
 
-                      // 描述
+                      // 5. 活動簡介（2 行摘要）
                       const Text(
-                        '活動說明',
+                        '活動簡介',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -156,13 +213,23 @@ class ActivityDetailPanel extends StatelessWidget {
                           color: Colors.grey[700],
                           height: 1.5,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // 主辦人
+                      _buildInfoRow(
+                        Icons.person,
+                        '主辦人：${activity.hostName}',
                       ),
                     ],
                   ),
                 ),
               ),
 
-              // 底部加入按鈕
+              // 底部加入按鈕（固定在底部）
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -175,51 +242,30 @@ class ActivityDetailPanel extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: SizedBox(
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: activity.isFull
-                              ? null
-                              : () => _joinActivity(context, activity.id),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00D0DD),
-                            disabledBackgroundColor: Colors.grey[300],
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(28),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: Text(
-                            activity.isFull ? '已額滿' : '加入活動',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // 評分按鈕
-                    Container(
-                      height: 56,
-                      width: 56,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF00D0DD).withAlpha(26),
+                child: SizedBox(
+                  height: 56,
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: activity.isFull
+                        ? null
+                        : () => _joinActivity(context, activity.id),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00D0DD),
+                      disabledBackgroundColor: Colors.grey[300],
+                      shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(28),
                       ),
-                      child: IconButton(
-                        onPressed: () => _showRatingDialog(context, activity.id),
-                        icon: const Icon(Icons.star_border),
-                        color: const Color(0xFF00D0DD),
-                        iconSize: 28,
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      activity.isFull ? '已額滿' : '申請加入',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -306,16 +352,136 @@ class ActivityDetailPanel extends StatelessWidget {
     );
   }
 
+  Widget _buildMarqueeTitle(String title) {
+    // 如果標題不長，直接顯示
+    if (title.length <= 15) {
+      return Text(
+        title,
+        style: const TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF2D3436),
+        ),
+      );
+    }
+    
+    // 長標題使用跑馬燈效果
+    return SizedBox(
+      height: 32,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2D3436),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInfoRow(IconData icon, String text) {
     return Row(
       children: [
         Icon(icon, size: 20, color: const Color(0xFF00D0DD)),
         const SizedBox(width: 12),
-        Text(
-          text,
-          style: const TextStyle(
-            fontSize: 14,
-            color: Color(0xFF2D3436),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFF2D3436),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildParticipantProgress(Activity activity) {
+    final progress = activity.currentParticipants / activity.maxParticipants;
+    final isNearlyFull = progress >= 0.8;
+    final isFull = activity.isFull;
+    
+    return Row(
+      children: [
+        const Icon(Icons.people, size: 20, color: Color(0xFF00D0DD)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${activity.currentParticipants}/${activity.maxParticipants} 人',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isFull 
+                          ? Colors.grey[600] 
+                          : isNearlyFull 
+                              ? const Color(0xFFFF6B35) 
+                              : const Color(0xFF2D3436),
+                    ),
+                  ),
+                  if (isFull)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '已額滿',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                    )
+                  else if (isNearlyFull)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF6B35).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        '即將額滿',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFFF6B35),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  backgroundColor: Colors.grey[200],
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    isFull 
+                        ? Colors.grey[400]! 
+                        : isNearlyFull 
+                            ? const Color(0xFFFF6B35) 
+                            : const Color(0xFF00D0DD),
+                  ),
+                  minHeight: 6,
+                ),
+              ),
+            ],
           ),
         ),
       ],

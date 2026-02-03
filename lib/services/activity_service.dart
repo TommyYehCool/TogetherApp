@@ -78,8 +78,11 @@ class ActivityService extends ChangeNotifier {
     required double longitude,
     required int maxParticipants,
     required String activityType,
-    required String region,      // 新增必填欄位：地區
-    required String address,     // 新增必填欄位：詳細地址
+    required String region,
+    required String address,
+    required DateTime startTime,      // 新增必填
+    required DateTime endTime,        // 新增必填
+    DateTime? registrationDeadline,   // 新增選填
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -94,6 +97,9 @@ class ActivityService extends ChangeNotifier {
       activityType: activityType,
       region: region,
       address: address,
+      startTime: startTime,
+      endTime: endTime,
+      registrationDeadline: registrationDeadline,
     );
 
     if (activity != null) {

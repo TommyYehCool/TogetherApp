@@ -31,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _selectedActivityId; // 追蹤選中的活動
   double _currentZoom = 17.0; // 追蹤當前地圖縮放等級
   bool _isMapGesturesEnabled = true; // 控制地圖手勢
+  bool _isUpdatingMarkers = false; // 防止重複更新標記
   
   // 防抖動計時器
   Timer? _debounceTimer;
@@ -89,14 +90,28 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _updateMarkers() async {
-    final activities = context.read<ActivityService>().activities;
-    final selectedActivity = context.read<ActivityService>().selectedActivity;
-    final Set<Marker> newMarkers = {};
-    final Set<String> processedActivityIds = {};
+    // 防止重複更新
+    if (_isUpdatingMarkers) {
+      print('⚠️ 標記更新中，跳過此次更新');
+      return;
+    }
+    
+    _isUpdatingMarkers = true;
+    
+    try {
+      final activities = context.read<ActivityService>().activities;
+      final selectedActivity = context.read<ActivityService>().selectedActivity;
+      final Set<Marker> newMarkers = {};
+      final Set<String> processedActivityIds = {};
 
-    print('\n========== 更新地圖標記 ==========');
-    print('活動數量: ${activities.length}');
-    print('選中活動: ${selectedActivity?.id}');
+      print('\n========== 更新地圖標記 ==========');
+      print('活動數量: ${activities.length}');
+      print('選中活動: ${selectedActivity?.id} - ${selectedActivity?.title}');
+      
+      // 列出所有活動
+      for (var i = 0; i < activities.length; i++) {
+        print('  [$i] ${activities[i].title} (${activities[i].id}) at (${activities[i].latitude}, ${activities[i].longitude})');
+      }
     
     // 加入自訂使用者位置標記
     final userLocationIcon = await _createUserLocationMarker();
@@ -118,30 +133,82 @@ class _HomeScreenState extends State<HomeScreen> {
     // 為所有活動建立標記
     for (final activity in activities) {
       if (processedActivityIds.contains(activity.id)) {
+        print('  跳過已處理的活動: ${activity.title}');
         continue;
       }
 
-      print('處理活動: ${activity.title}');
+      print('處理活動: ${activity.title} (${activity.id})');
       
       try {
         final isSelected = selectedActivity?.id == activity.id;
         
-        // 檢查是否有重疊活動（排除已選中的活動）
-        final nearbyActivities = _findNearbyActivities(activity, radiusMeters: detectionRadius)
-            .where((a) => a.id != selectedActivity?.id) // 排除選中的活動
+        // 🔥 關鍵邏輯：如果有活動被選中，只處理選中的活動，跳過所有其他活動
+        if (selectedActivity != null && !isSelected) {
+          print('  有活動被選中，跳過此活動');
+          processedActivityIds.add(activity.id);
+          continue;
+        }
+        
+        // 如果是選中的活動，立即標記為已處理並創建選中標記
+        if (isSelected) {
+          processedActivityIds.add(activity.id);
+          print('  這是選中的活動，直接創建選中標記');
+          
+          final markerIcon = await SelectedActivityMarker(
+            activityIcon: _getActivityIcon(activity.category),
+            title: activity.title,
+            participantCount: activity.participantCount,
+            isLive: activity.isOngoing,
+            isNearlyFull: activity.currentParticipants / activity.maxParticipants >= 0.8,
+            isFull: activity.isFull,
+          ).toBitmapDescriptor(
+            logicalSize: const Size(180, 66),
+            imageSize: const Size(540, 198),
+          );
+          
+          newMarkers.add(
+            Marker(
+              markerId: MarkerId(activity.id),
+              position: LatLng(activity.latitude, activity.longitude),
+              icon: markerIcon,
+              anchor: const Offset(0.5, 0.85),
+              zIndex: 100.0,
+              onTap: () => _onMarkerTap(activity),
+              consumeTapEvents: true,
+            ),
+          );
+          print('  ✅ 選中標記已加入: ${activity.id}');
+          continue; // 跳過後續處理
+        }
+        
+        // 以下是沒有選中活動時的正常邏輯
+        // 檢查是否有重疊活動
+        final nearbyActivities = _findNearbyActivities(activity, radiusMeters: detectionRadius);
+        
+        // 過濾出未處理的附近活動
+        final unprocessedNearby = nearbyActivities
+            .where((a) => !processedActivityIds.contains(a.id))
             .toList();
         
-        if (nearbyActivities.length > 1 && !isSelected) {
-          // 有多個活動重疊（且都未被選中），使用 Cluster 膠囊標記
-          print('  檢測到 ${nearbyActivities.length} 個重疊活動，使用 Cluster 膠囊標記');
+        print('  附近活動數: ${nearbyActivities.length}, 未處理: ${unprocessedNearby.length}');
+        
+        // Cluster 條件：有多個未處理的活動重疊 (>= 2)
+        final shouldCluster = unprocessedNearby.length >= 2;
+        
+        print('  shouldCluster: $shouldCluster');
+        
+        if (shouldCluster) {
+          // 使用 Cluster 膠囊標記
+          print('  ✅ 建立 Cluster: ${unprocessedNearby.length} 個活動');
           
-          for (final nearbyActivity in nearbyActivities) {
+          // 標記所有這些活動為已處理
+          for (final nearbyActivity in unprocessedNearby) {
             processedActivityIds.add(nearbyActivity.id);
           }
           
-          // 建立 Cluster 膠囊標記（留足 padding 給陰影）
+          // 建立 Cluster 膠囊標記
           final clusterIcon = await ClusterPillMarker(
-            count: nearbyActivities.length,
+            count: unprocessedNearby.length,
           ).toBitmapDescriptor(
             logicalSize: const Size(100, 58),
             imageSize: const Size(300, 174), // 3x 高解析度
@@ -152,61 +219,66 @@ class _HomeScreenState extends State<HomeScreen> {
               markerId: MarkerId('cluster_${activity.id}'),
               position: LatLng(activity.latitude, activity.longitude),
               icon: clusterIcon,
-              anchor: const Offset(0.5, 0.85), // 錨點在 anchor dot 位置
-              zIndex: 50,
-              onTap: () => _showNearbyActivitiesList(nearbyActivities),
+              anchor: const Offset(0.5, 0.85),
+              zIndex: 50.0,
+              onTap: () => _showNearbyActivitiesList(unprocessedNearby),
+              consumeTapEvents: true, // 確保點擊事件被消費
             ),
           );
-          print('  ✅ Cluster 膠囊標記已加入');
+          print('  ✅ Cluster 標記已加入: cluster_${activity.id}');
         } else {
-          // 單一活動（或被選中的活動）
+          // 單一活動標記
           processedActivityIds.add(activity.id);
+          print('  建立單一活動標記');
           
           BitmapDescriptor markerIcon;
           final isNearlyFull = activity.currentParticipants / activity.maxParticipants >= 0.8;
           
-          if (isSelected) {
-            // 選中狀態：高亮 + 發光圈 + 完整資訊
-            markerIcon = await SelectedActivityMarker(
-              activityIcon: _getActivityIcon(activity.category),
-              title: activity.title,
-              participantCount: activity.participantCount,
-              isLive: activity.isOngoing,
-              isNearlyFull: isNearlyFull,
-              isFull: activity.isFull,
-            ).toBitmapDescriptor(
-              logicalSize: const Size(180, 66),
-              imageSize: const Size(540, 198), // 3x 高解析度
+          // 計算 zIndex
+          double zIndex = 1.0;
+          if (selectedActivity != null) {
+            // 如果有選中的活動，檢查當前活動是否接近選中活動
+            final distanceToSelected = _calculateDistance(
+              activity.latitude,
+              activity.longitude,
+              selectedActivity.latitude,
+              selectedActivity.longitude,
             );
-            print('  使用選中標記（高亮 + 發光圈）');
-          } else {
-            // 預設狀態：活動膠囊
-            markerIcon = await ActivityPillMarker(
-              activityIcon: _getActivityIcon(activity.category),
-              participantCount: activity.participantCount,
-              isLive: activity.isOngoing,
-              isNearlyFull: isNearlyFull,
-              isFull: activity.isFull,
-              currentCount: activity.currentParticipants,
-              maxCount: activity.maxParticipants,
-            ).toBitmapDescriptor(
-              logicalSize: const Size(85, 58),
-              imageSize: const Size(255, 174), // 3x 高解析度
-            );
-            print('  使用活動膠囊標記');
+            if (distanceToSelected < detectionRadius) {
+              // 接近選中活動的其他活動，提高 zIndex 以確保可點擊
+              zIndex = 80.0;
+              print('  活動接近選中活動，提高 zIndex 到 $zIndex');
+            }
           }
+          
+          // 預設狀態：活動膠囊
+          markerIcon = await ActivityPillMarker(
+            activityIcon: _getActivityIcon(activity.category),
+            title: activity.title,
+            participantCount: activity.participantCount,
+            isLive: activity.isOngoing,
+            isNearlyFull: isNearlyFull,
+            isFull: activity.isFull,
+            currentCount: activity.currentParticipants,
+            maxCount: activity.maxParticipants,
+          ).toBitmapDescriptor(
+            logicalSize: const Size(200, 58), // 增加寬度到 200
+            imageSize: const Size(600, 174), // 3x 高解析度
+          );
+          print('  使用活動膠囊標記');
 
           newMarkers.add(
             Marker(
               markerId: MarkerId(activity.id),
               position: LatLng(activity.latitude, activity.longitude),
               icon: markerIcon,
-              anchor: const Offset(0.5, 0.85), // 錨點在 anchor dot 位置
-              zIndex: isSelected ? 100 : 1,
+              anchor: const Offset(0.5, 0.85),
+              zIndex: zIndex,
               onTap: () => _onMarkerTap(activity),
+              consumeTapEvents: true,
             ),
           );
-          print('  ✅ 標記已加入');
+          print('  ✅ 標記已加入: ${activity.id} (zIndex: $zIndex)');
         }
       } catch (e) {
         print('  ❌ 建立標記失敗: $e');
@@ -214,9 +286,21 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     print('總標記數: ${newMarkers.length}');
+    print('標記列表:');
+    for (final marker in newMarkers) {
+      print('  - ${marker.markerId.value} at ${marker.position}, zIndex: ${marker.zIndex}');
+    }
     print('========== 更新完成 ==========\n');
     
-    setState(() => _markers = newMarkers);
+    // 直接替換標記（不需要延遲）
+    if (mounted) {
+      setState(() {
+        _markers = newMarkers;
+      });
+    }
+    } finally {
+      _isUpdatingMarkers = false;
+    }
   }
 
   // 處理標記點擊事件
@@ -574,13 +658,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    
     return Scaffold(
       body: SlidingUpPanel(
         controller: _panelController,
         minHeight: 0,
-        maxHeight: MediaQuery.of(context).size.height * 0.7,
+        maxHeight: screenHeight * 0.45, // 改為 45%
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        panel: const ActivityDetailPanel(),
+        panel: ActivityDetailPanel(
+          onClose: () {
+            // 關閉面板
+            _panelController.close();
+          },
+        ),
         onPanelSlide: (position) {
           // 當面板滑動時，根據位置禁用/啟用地圖手勢
           // position: 0.0 (關閉) ~ 1.0 (完全打開)
@@ -588,6 +679,16 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() => _isMapGesturesEnabled = false);
           } else if (position <= 0.1 && !_isMapGesturesEnabled) {
             setState(() => _isMapGesturesEnabled = true);
+          }
+        },
+        onPanelClosed: () {
+          // 面板關閉時，清除選中狀態，恢復 cluster 顯示
+          if (_selectedActivityId != null) {
+            setState(() {
+              _selectedActivityId = null;
+            });
+            context.read<ActivityService>().selectActivity(null);
+            _updateMarkers(); // 重新渲染標記
           }
         },
         body: Stack(
@@ -601,9 +702,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               markers: _markers,
               myLocationEnabled: false, // 關閉預設藍點，使用自訂標記
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              mapToolbarEnabled: false,
+              myLocationButtonEnabled: false, // 關閉預設定位按鈕
+              zoomControlsEnabled: false, // 關閉縮放控制按鈕
+              mapToolbarEnabled: false, // 關閉地圖工具列
+              compassEnabled: false, // 關閉指南針
               onCameraMove: _onCameraMove,
               onCameraIdle: _onCameraIdle,
               // 根據狀態控制地圖手勢
@@ -611,6 +713,11 @@ class _HomeScreenState extends State<HomeScreen> {
               zoomGesturesEnabled: _isMapGesturesEnabled,
               tiltGesturesEnabled: _isMapGesturesEnabled,
               rotateGesturesEnabled: _isMapGesturesEnabled,
+              // 攔截地圖點擊，防止 POI 彈窗
+              onTap: (LatLng position) {
+                print('地圖被點擊: $position');
+                // 不做任何事，阻止 POI 彈窗
+              },
             ),
 
             // 頂部搜尋列
@@ -659,7 +766,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-            // 我的位置按鈕
+            // 我的位置按鈕（右下角）
             Positioned(
               bottom: 100,
               right: 16,
@@ -671,7 +778,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // 建立活動按鈕
+            // 建立活動按鈕（右下角，在我的位置按鈕下方）
             Positioned(
               bottom: 24,
               right: 16,

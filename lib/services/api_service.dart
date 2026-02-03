@@ -169,8 +169,11 @@ class ApiService {
     required double longitude,
     required int maxParticipants,
     required String activityType,
-    required String region,      // 必填：地區
-    required String address,     // 必填：詳細地址
+    required String region,
+    required String address,
+    required DateTime startTime,      // 新增必填：開始時間
+    required DateTime endTime,        // 新增必填：結束時間
+    DateTime? registrationDeadline,   // 新增選填：報名截止時間
   }) async {
     print('\n========== 建立活動開始 ==========');
     print('Token 狀態: ${_authToken != null && _authToken!.isNotEmpty ? "已設定" : "未設定"}');
@@ -186,53 +189,48 @@ class ApiService {
       print('  max_slots: $maxParticipants,');
       print('  activity_type: $activityType,');
       print('  region: $region,');
-      print('  address: $address');
+      print('  address: $address,');
+      print('  start_time: ${startTime.toIso8601String()},');
+      print('  end_time: ${endTime.toIso8601String()},');
+      if (registrationDeadline != null) {
+        print('  registration_deadline: ${registrationDeadline.toIso8601String()}');
+      }
       print('}');
       
       print('\n發送 HTTP POST 請求...');
       
+      final requestData = {
+        'title': title,
+        'description': description,
+        'lat': latitude,
+        'lng': longitude,
+        'max_slots': maxParticipants,
+        'activity_type': activityType,
+        'region': region,
+        'address': address,
+        'start_time': startTime.toIso8601String(),
+        'end_time': endTime.toIso8601String(),
+      };
+      
+      if (registrationDeadline != null) {
+        requestData['registration_deadline'] = registrationDeadline.toIso8601String();
+      }
+      
       final response = await _dio.post(
         '$baseUrl/activities/',
-        data: {
-          'title': title,
-          'description': description,
-          'lat': latitude,
-          'lng': longitude,
-          'max_slots': maxParticipants,
-          'activity_type': activityType,
-          'region': region,
-          'address': address,
-        },
+        data: requestData,
       );
 
       print('✅ 建立活動回應: ${response.statusCode}');
       print('回應資料: ${response.data}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        // 解析後端回應
         final data = response.data;
         
         print('活動建立成功');
         print('========== 建立活動成功 ==========\n');
         
-        return Activity(
-          id: data['id']?.toString() ?? 'unknown',
-          title: data['title'] ?? title,
-          description: data['description'] ?? description,
-          latitude: (data['lat'] ?? latitude).toDouble(),
-          longitude: (data['lng'] ?? longitude).toDouble(),
-          startTime: data['start_time'] != null 
-              ? DateTime.parse(data['start_time'])
-              : DateTime.now(),
-          maxParticipants: data['max_slots'] ?? maxParticipants,
-          currentParticipants: data['current_participants'] ?? 1,
-          category: data['activity_type'] ?? activityType,
-          hostId: data['host_id']?.toString() ?? 'current_user',
-          hostName: data['host_name'] ?? '我',
-          isBoosted: data['is_boosted'] ?? false,
-          address: data['address'] ?? address,
-          region: data['region'] ?? region,
-        );
+        return Activity.fromJson(data);
       }
       return null;
     } catch (e) {
@@ -256,14 +254,17 @@ class ApiService {
         description: description,
         latitude: latitude,
         longitude: longitude,
-        startTime: DateTime.now(),
+        startTime: startTime,
+        endTime: endTime,
+        registrationDeadline: registrationDeadline,
         maxParticipants: maxParticipants,
         currentParticipants: 1,
         category: activityType,
         hostId: 'mock_user',
         hostName: '我',
         isBoosted: false,
-        address: address, // 使用傳入的地址
+        address: address,
+        region: region,
       );
     }
   }
@@ -475,6 +476,8 @@ class ApiService {
 
   // Mock 資料（用於開發測試）
   List<Activity> _getMockActivities(double lat, double lng) {
+    final now = DateTime.now();
+    
     return [
       Activity(
         id: '1',
@@ -482,7 +485,8 @@ class ApiService {
         description: '一起來咖啡廳讀書吧！歡迎帶自己的書',
         latitude: lat + 0.005,
         longitude: lng + 0.005,
-        startTime: DateTime.now().add(const Duration(hours: 2)),
+        startTime: now.add(const Duration(hours: 2)),
+        endTime: now.add(const Duration(hours: 4)),
         maxParticipants: 5,
         currentParticipants: 3,
         category: '學習',
@@ -496,7 +500,8 @@ class ApiService {
         description: '缺 2 人打全場',
         latitude: lat - 0.008,
         longitude: lng + 0.003,
-        startTime: DateTime.now().add(const Duration(hours: 1)),
+        startTime: now.subtract(const Duration(minutes: 30)), // 30 分鐘前開始
+        endTime: now.add(const Duration(hours: 1, minutes: 30)), // 還有 1.5 小時
         maxParticipants: 6,
         currentParticipants: 4,
         category: '運動',
@@ -509,7 +514,8 @@ class ApiService {
         description: '一起逛夜市吃美食',
         latitude: lat + 0.003,
         longitude: lng - 0.007,
-        startTime: DateTime.now().add(const Duration(hours: 3)),
+        startTime: now.add(const Duration(hours: 3)),
+        endTime: now.add(const Duration(hours: 5)),
         maxParticipants: 8,
         currentParticipants: 8,
         category: '美食',

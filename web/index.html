@@ -14,6 +14,45 @@
 
   <title>Together</title>
   <link rel="manifest" href="manifest.json">
+  
+  <style>
+    /* 隱藏 Google 地圖的所有 UI 控制元素 */
+    .gm-style .gm-style-cc,
+    .gm-style .gmnoprint,
+    .gm-style button,
+    .gm-style-mtc,
+    .gm-svpc,
+    .gm-control-active {
+      display: none !important;
+    }
+    
+    /* 隱藏 POI（興趣點）標籤和資訊卡 */
+    .gm-style .gm-style-iw,
+    .gm-style .gm-style-iw-c,
+    .gm-style .gm-style-iw-d,
+    .gm-style .gm-style-iw-t,
+    .poi-info-window,
+    .place-card,
+    .place-card-large {
+      display: none !important;
+      pointer-events: none !important;
+    }
+    
+    /* 隱藏 POI 標籤文字 */
+    .gm-style-pbc {
+      display: none !important;
+    }
+    
+    /* 防止點擊 POI */
+    .gm-style > div > div > div > div > div > div > div {
+      pointer-events: none !important;
+    }
+    
+    /* 只允許我們的自訂標記可以點擊 */
+    .gm-style img[src*="marker"] {
+      pointer-events: auto !important;
+    }
+  </style>
 
   <script>
     var serviceWorkerVersion = null;

@@ -29,6 +29,10 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
   late LatLng _selectedLocation;
   String _locationAddress = '載入地址中...';
   bool _isLoadingAddress = false;
+  
+  // 新增：時間相關欄位
+  DateTime _startTime = DateTime.now().add(const Duration(hours: 1));
+  DateTime _endTime = DateTime.now().add(const Duration(hours: 3));
 
   final List<String> _categories = [
     '社交', '運動', '學習', '美食', '旅遊', '音樂', '藝術', '其他'
@@ -135,6 +139,8 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
       activityType: _selectedCategory,
       region: region,
       address: address,
+      startTime: _startTime,      // 新增
+      endTime: _endTime,          // 新增
     );
 
     if (mounted) {
@@ -289,6 +295,115 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                       label: '$_maxParticipants 人',
                       onChanged: (value) {
                         setState(() => _maxParticipants = value.toInt());
+                      },
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // 開始時間
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.access_time, color: Color(0xFF00D0DD)),
+                      title: const Text(
+                        '開始時間',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '${_startTime.month}/${_startTime.day} ${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: _startTime,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        
+                        if (date != null && mounted) {
+                          final time = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(_startTime),
+                          );
+                          
+                          if (time != null) {
+                            setState(() {
+                              _startTime = DateTime(
+                                date.year,
+                                date.month,
+                                date.day,
+                                time.hour,
+                                time.minute,
+                              );
+                              // 自動調整結束時間（開始時間 + 2 小時）
+                              if (_endTime.isBefore(_startTime)) {
+                                _endTime = _startTime.add(const Duration(hours: 2));
+                              }
+                            });
+                          }
+                        }
+                      },
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // 結束時間
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.event_available, color: Color(0xFF00D0DD)),
+                      title: const Text(
+                        '結束時間',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '${_endTime.month}/${_endTime.day} ${_endTime.hour.toString().padLeft(2, '0')}:${_endTime.minute.toString().padLeft(2, '0')}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: _endTime,
+                          firstDate: _startTime,
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        
+                        if (date != null && mounted) {
+                          final time = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(_endTime),
+                          );
+                          
+                          if (time != null) {
+                            final newEndTime = DateTime(
+                              date.year,
+                              date.month,
+                              date.day,
+                              time.hour,
+                              time.minute,
+                            );
+                            
+                            if (newEndTime.isAfter(_startTime)) {
+                              setState(() {
+                                _endTime = newEndTime;
+                              });
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('結束時間必須晚於開始時間'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        }
                       },
                     ),
 

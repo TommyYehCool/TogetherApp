@@ -25,6 +25,7 @@ import 'package:flutter/material.dart';
 /// - anchor dot: 8px（讓 marker 有位置指向）
 class ActivityPillMarker extends StatelessWidget {
   final IconData activityIcon;
+  final String title; // 新增：活動標題
   final String participantCount;
   final bool isLive;
   final bool isNearlyFull; // >= 80%
@@ -35,6 +36,7 @@ class ActivityPillMarker extends StatelessWidget {
   const ActivityPillMarker({
     super.key,
     required this.activityIcon,
+    required this.title,
     required this.participantCount,
     this.isLive = false,
     this.isNearlyFull = false,
@@ -45,8 +47,17 @@ class ActivityPillMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 根據標題長度動態調整顯示
+    String displayTitle;
+    if (title.length <= 12) {
+      displayTitle = title;
+    } else {
+      // 超過 12 個字元，顯示前 12 個 + ...
+      displayTitle = '${title.substring(0, 12)}...';
+    }
+    
     return SizedBox(
-      width: 85,
+      width: 200, // 再增加寬度
       height: 58,
       child: Stack(
         alignment: Alignment.center,
@@ -61,7 +72,7 @@ class ActivityPillMarker extends StatelessWidget {
           // 主膠囊（使用 PhysicalModel 產生陰影）
           Positioned(
             top: 6,
-            child: _buildPillContent(),
+            child: _buildPillContent(displayTitle),
           ),
         ],
       ),
@@ -69,43 +80,63 @@ class ActivityPillMarker extends StatelessWidget {
   }
 
   /// 建立膠囊內容（純陰影，無邊框）
-  Widget _buildPillContent() {
+  Widget _buildPillContent(String displayTitle) {
     return PhysicalModel(
       color: Colors.white.withOpacity(0.96),
       borderRadius: BorderRadius.circular(18),
-      elevation: 10, // 主陰影：0 10 24 rgba(0,0,0,0.14)
+      elevation: 10,
       shadowColor: Colors.black.withOpacity(0.14),
       child: Container(
         height: 36,
+        constraints: const BoxConstraints(
+          minWidth: 120,
+          maxWidth: 200, // 增加最大寬度
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          // 完全移除 border
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // LIVE 標籤（如果是進行中）- 唯一的重點色
+            // LIVE 標籤
             if (isLive) ...[
               _buildLiveChip(),
               const SizedBox(width: 6),
             ],
             
             // 活動圖標
-            if (!isLive) ...[
-              Icon(
+            SizedBox(
+              width: 16,
+              child: Icon(
                 activityIcon,
                 size: 16,
                 color: const Color(0xFF00D0DD),
               ),
-              const SizedBox(width: 6),
-            ],
+            ),
+            const SizedBox(width: 6),
+            
+            // 活動標題
+            Flexible(
+              child: Text(
+                displayTitle,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2D3436),
+                  height: 1.0,
+                ),
+                overflow: TextOverflow.visible, // 允許文字完整顯示
+                maxLines: 1,
+              ),
+            ),
+            const SizedBox(width: 4),
             
             // 人數顯示
             Text(
               participantCount,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: _getParticipantColor(),
                 height: 1.0,
