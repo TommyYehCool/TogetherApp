@@ -356,6 +356,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // 顯示診斷報告
         showDialog(
           context: context,
+          barrierDismissible: false,
           builder: (context) => AlertDialog(
             title: Row(
               children: [
@@ -392,6 +393,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         
         showDialog(
           context: context,
+          barrierDismissible: false,
           builder: (context) => AlertDialog(
             title: const Row(
               children: [

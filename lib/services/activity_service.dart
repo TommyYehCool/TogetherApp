@@ -51,23 +51,95 @@ class ActivityService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 加入活動
-  Future<bool> joinActivity(int activityId) async {
+  // 申請加入活動
+  Future<Map<String, dynamic>> joinActivity(String activityId) async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
-    final success = await _apiService.joinActivity(activityId);
-    
-    if (success) {
-      // 重新載入活動資料
+    try {
+      final result = await _apiService.joinActivity(activityId);
+      
+      if (result['success']) {
+        // 申請成功，可以重新載入活動資料
+        print('✅ 申請加入活動成功');
+      } else {
+        _errorMessage = result['message'];
+        print('❌ 申請加入活動失敗: ${result['message']}');
+      }
+      
+      _isLoading = false;
       notifyListeners();
-    } else {
-      _errorMessage = '加入活動失敗';
+      return result;
+    } catch (e) {
+      _errorMessage = '申請失敗: $e';
+      _isLoading = false;
+      notifyListeners();
+      return {
+        'success': false,
+        'message': _errorMessage,
+      };
     }
+  }
 
-    _isLoading = false;
+  // 上傳活動照片
+  Future<Map<String, dynamic>> uploadActivityImages(String activityId, List<String> imagePaths) async {
+    _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
-    return success;
+
+    try {
+      final result = await _apiService.uploadActivityImages(activityId, imagePaths);
+      
+      if (result['success']) {
+        print('✅ 上傳活動照片成功');
+      } else {
+        _errorMessage = result['message'];
+        print('❌ 上傳活動照片失敗: ${result['message']}');
+      }
+      
+      _isLoading = false;
+      notifyListeners();
+      return result;
+    } catch (e) {
+      _errorMessage = '上傳失敗: $e';
+      _isLoading = false;
+      notifyListeners();
+      return {
+        'success': false,
+        'message': _errorMessage,
+      };
+    }
+  }
+
+  // 上傳用戶大頭貼
+  Future<Map<String, dynamic>> uploadAvatar(String imagePath) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await _apiService.uploadAvatar(imagePath);
+      
+      if (result['success']) {
+        print('✅ 上傳大頭貼成功');
+      } else {
+        _errorMessage = result['message'];
+        print('❌ 上傳大頭貼失敗: ${result['message']}');
+      }
+      
+      _isLoading = false;
+      notifyListeners();
+      return result;
+    } catch (e) {
+      _errorMessage = '上傳失敗: $e';
+      _isLoading = false;
+      notifyListeners();
+      return {
+        'success': false,
+        'message': _errorMessage,
+      };
+    }
   }
 
   // 建立活動

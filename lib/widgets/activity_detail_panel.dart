@@ -196,7 +196,7 @@ class ActivityDetailPanel extends StatelessWidget {
 
                       const SizedBox(height: 24),
 
-                      // 5. 活動簡介（2 行摘要）
+                      // 5. 活動簡介（完整顯示）
                       const Text(
                         '活動簡介',
                         style: TextStyle(
@@ -213,8 +213,6 @@ class ActivityDetailPanel extends StatelessWidget {
                           color: Colors.grey[700],
                           height: 1.5,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
 
                       const SizedBox(height: 16),
@@ -281,6 +279,7 @@ class ActivityDetailPanel extends StatelessWidget {
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: const Text('評分活動'),
@@ -500,23 +499,30 @@ class ActivityDetailPanel extends StatelessWidget {
       ),
     );
 
-    final success = await service.joinActivity(int.parse(activityId));
+    final result = await service.joinActivity(activityId);
     
     if (context.mounted) {
       Navigator.pop(context); // 關閉載入對話框
 
-      if (success) {
+      if (result['success']) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('成功加入活動！'),
-            backgroundColor: Color(0xFF00D0DD),
+          SnackBar(
+            content: Text(result['message'] ?? '申請成功！'),
+            backgroundColor: const Color(0xFF00D0DD),
+            duration: const Duration(seconds: 3),
           ),
         );
+        
+        // 關閉活動詳情面板（如果有提供 onClose 回調）
+        if (onClose != null) {
+          onClose!();
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('加入活動失敗，請稍後再試'),
+          SnackBar(
+            content: Text(result['message'] ?? '申請失敗，請稍後再試'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }

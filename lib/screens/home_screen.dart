@@ -377,6 +377,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showNearbyActivitiesList(List<Activity> activities) {
     showModalBottomSheet(
       context: context,
+      isDismissible: false,
+      enableDrag: true, // 允許拖曳但不允許點擊外部關閉
       backgroundColor: Colors.transparent,
       isScrollControlled: true, // 允許自訂高度
       builder: (context) => DraggableScrollableSheet(
@@ -628,6 +630,8 @@ class _HomeScreenState extends State<HomeScreen> {
     
     final result = await showModalBottomSheet<bool>(
       context: context,
+      isDismissible: false,
+      enableDrag: false,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => CreateActivityDialog(
@@ -912,11 +916,17 @@ class ActivitySearchDelegate extends SearchDelegate<String> {
   List<Widget> buildActions(BuildContext context) {
     return [
       if (query.isNotEmpty)
-        IconButton(
-          icon: const Icon(Icons.clear),
+        TextButton(
           onPressed: () {
             query = '';
           },
+          child: Text(
+            '清除',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+            ),
+          ),
         ),
       IconButton(
         icon: const Icon(Icons.close),

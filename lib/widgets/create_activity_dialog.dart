@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart' as picker;
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../services/activity_service.dart';
 import 'location_picker_dialog.dart';
 
@@ -24,12 +28,14 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final ImagePicker _imagePicker = ImagePicker();
   
   String _selectedCategory = '社交';
   int _maxParticipants = 5;
   late LatLng _selectedLocation;
   String _locationAddress = '載入地址中...';
   bool _isLoadingAddress = false;
+  List<XFile> _selectedImages = []; // 新增：選擇的照片列表
   
   // 新增：時間相關欄位
   DateTime _startTime = DateTime.now().add(const Duration(hours: 1));
@@ -87,6 +93,57 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  // 選擇照片
+  Future<void> _pickImages() async {
+    try {
+      final List<XFile> images = await _imagePicker.pickMultiImage(
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
+      
+      if (images.isNotEmpty) {
+        // 限制最多3張
+        if (_selectedImages.length + images.length > 3) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('最多只能選擇 3 張照片'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          // 只取前面的照片，確保總數不超過3張
+          final remainingSlots = 3 - _selectedImages.length;
+          setState(() {
+            _selectedImages.addAll(images.take(remainingSlots));
+          });
+        } else {
+          setState(() {
+            _selectedImages.addAll(images);
+          });
+        }
+      }
+    } catch (e) {
+      print('選擇照片失敗: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('選擇照片失敗'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // 移除照片
+  void _removeImage(int index) {
+    setState(() {
+      _selectedImages.removeAt(index);
+    });
   }
 
   // 選擇開始時間 - 使用滾輪式選擇器
@@ -283,12 +340,66 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
       Navigator.pop(context); // 關閉載入對話框
       
       if (activity != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ 活動建立成功！'),
-            backgroundColor: Color(0xFF00D0DD),
-          ),
-        );
+        print('\n========== 活動建立成功 ==========');
+        print('活動 ID: ${activity.id}');
+        print('活動 ID 類型: ${activity.id.runtimeType}');
+        print('選擇的照片數量: ${_selectedImages.length}');
+        
+        // 如果有選擇照片，上傳照片
+        if (_selectedImages.isNotEmpty) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Color(0xFF00D0DD)),
+                  SizedBox(height: 16),
+                  Text(
+                    '正在上傳照片...',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          );
+          
+          print('準備上傳照片...');
+          final imagePaths = _selectedImages.map((img) => img.path).toList();
+          print('照片路徑: $imagePaths');
+          
+          final uploadResult = await service.uploadActivityImages(activity.id, imagePaths);
+          
+          print('上傳結果: $uploadResult');
+          
+          if (mounted) {
+            Navigator.pop(context); // 關閉上傳對話框
+            
+            if (uploadResult['success']) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('✅ 活動建立成功，照片上傳成功！'),
+                  backgroundColor: Color(0xFF00D0DD),
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('活動建立成功，但照片上傳失敗：${uploadResult['message']}'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ 活動建立成功！'),
+              backgroundColor: Color(0xFF00D0DD),
+            ),
+          );
+        }
         
         widget.onActivityCreated();
         Navigator.pop(context); // 關閉建立對話框
@@ -354,16 +465,26 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                     // 活動標題
                     TextFormField(
                       controller: _titleController,
+                      maxLength: 10, // 限制 10 個字
                       decoration: InputDecoration(
                         labelText: '活動標題',
                         hintText: '例如：咖啡廳讀書會',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
+                        counterText: '', // 隱藏預設的字數計數器
+                        helperText: '最多 10 個字',
+                        helperStyle: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return '請輸入活動標題';
+                        }
+                        if (value.length > 10) {
+                          return '標題不能超過 10 個字';
                         }
                         return null;
                       },
@@ -397,16 +518,26 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                     TextFormField(
                       controller: _descriptionController,
                       maxLines: 4,
+                      maxLength: 100, // 限制 100 個字
                       decoration: InputDecoration(
                         labelText: '活動說明',
                         hintText: '描述活動內容、注意事項等...',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
+                        counterText: '', // 隱藏預設的字數計數器
+                        helperText: '最多 100 個字',
+                        helperStyle: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return '請輸入活動說明';
+                        }
+                        if (value.length > 100) {
+                          return '說明不能超過 100 個字';
                         }
                         return null;
                       },
@@ -507,6 +638,123 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                           await _getAddressFromLocation(result);
                         }
                       },
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // 活動照片（選填，最多3張）
+                    const Text(
+                      '活動照片（選填，最多 3 張）',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '⚠️ Web 版本暫不支援照片上傳，請使用 App 版本',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange[700],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // 照片預覽和選擇按鈕
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        // 顯示已選擇的照片
+                        ..._selectedImages.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final image = entry.value;
+                          return Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: FutureBuilder<Uint8List>(
+                                  future: image.readAsBytes(),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.hasData) {
+                                      return Image.memory(
+                                        snapshot.data!,
+                                        width: 100,
+                                        height: 100,
+                                        fit: BoxFit.cover,
+                                      );
+                                    }
+                                    return Container(
+                                      width: 100,
+                                      height: 100,
+                                      color: Colors.grey[300],
+                                      child: const Center(
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: GestureDetector(
+                                  onTap: () => _removeImage(index),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
+                        
+                        // 添加照片按鈕
+                        if (_selectedImages.length < 3)
+                          GestureDetector(
+                            onTap: _pickImages,
+                            child: Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[200],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.grey[400]!,
+                                  width: 2,
+                                  style: BorderStyle.solid,
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_photo_alternate,
+                                    size: 32,
+                                    color: Colors.grey[600],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '添加照片',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),

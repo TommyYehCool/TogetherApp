@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/activity_service.dart';
 import 'settings_screen.dart';
 
@@ -237,6 +238,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   void _showHostOptions(activity) {
     showModalBottomSheet(
       context: context,
+      isDismissible: false,
+      enableDrag: false,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -251,6 +254,14 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               onTap: () {
                 Navigator.pop(context);
                 _showJoinRequests(activity.id);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_photo_alternate, color: Color(0xFF00D0DD)),
+              title: const Text('上傳活動照片'),
+              onTap: () {
+                Navigator.pop(context);
+                _uploadActivityPhotos(activity.id);
               },
             ),
             ListTile(
@@ -284,6 +295,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('加入請求'),
         contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
@@ -395,12 +407,127 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
+  Future<void> _uploadActivityPhotos(String activityId) async {
+    final service = context.read<ActivityService>();
+    final ImagePicker imagePicker = ImagePicker();
+    
+    // Web 平台提示
+    if (mounted) {
+      final shouldContinue = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('照片上傳'),
+          content: const Text(
+            '⚠️ Web 版本暫不支援照片上傳功能。\n\n'
+            '如需上傳活動照片，請使用 Android 或 iOS App 版本。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00D0DD),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('仍要嘗試'),
+            ),
+          ],
+        ),
+      );
+      
+      if (shouldContinue != true) {
+        return;
+      }
+    }
+    
+    try {
+      // 選擇照片（最多3張）
+      final List<XFile> images = await imagePicker.pickMultiImage(
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
+      
+      if (images.isEmpty) {
+        return;
+      }
+      
+      if (images.length > 3) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('最多只能選擇 3 張照片'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      
+      // 顯示上傳中
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: Color(0xFF00D0DD)),
+                SizedBox(height: 16),
+                Text(
+                  '正在上傳照片...',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      
+      // 上傳照片
+      final imagePaths = images.map((img) => img.path).toList();
+      final result = await service.uploadActivityImages(activityId, imagePaths);
+      
+      if (mounted) {
+        Navigator.pop(context); // 關閉上傳對話框
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? (result['success'] ? '照片上傳成功！' : '照片上傳失敗')),
+            backgroundColor: result['success'] ? const Color(0xFF00D0DD) : Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        
+        if (result['success']) {
+          _loadActivities(); // 重新載入活動列表
+        }
+      }
+    } catch (e) {
+      print('選擇照片失敗: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('選擇照片失敗'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _boostActivity(String activityId) async {
     final service = context.read<ActivityService>();
     
     // 顯示確認對話框
     final confirmed = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Boost 活動'),
         content: const Text('確定要花費 NT\$30 提升此活動的曝光度嗎？'),

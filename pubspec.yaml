@@ -31,6 +31,7 @@ dependencies:
   permission_handler: ^11.1.0
   intl: ^0.20.2
   flutter_datetime_picker_plus: ^2.2.0
+  image_picker: ^1.0.7
   
   # 環境變數
   flutter_dotenv: ^5.1.0

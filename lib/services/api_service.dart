@@ -223,14 +223,23 @@ class ApiService {
 
       print('✅ 建立活動回應: ${response.statusCode}');
       print('回應資料: ${response.data}');
+      print('回應資料類型: ${response.data.runtimeType}');
+      
+      if (response.data is Map) {
+        print('回應包含的欄位: ${(response.data as Map).keys.toList()}');
+        print('ID 欄位值: ${response.data['id']}');
+      }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = response.data;
         
+        print('開始解析活動資料...');
+        final activity = Activity.fromJson(data);
+        print('解析後的活動 ID: ${activity.id}');
         print('活動建立成功');
         print('========== 建立活動成功 ==========\n');
         
-        return Activity.fromJson(data);
+        return activity;
       }
       return null;
     } catch (e) {
@@ -371,19 +380,52 @@ class ApiService {
       return [];
     }
   }
-  // 加入活動
-  Future<bool> joinActivity(int activityId) async {
+  // 申請加入活動
+  Future<Map<String, dynamic>> joinActivity(String activityId) async {
     try {
-      print('申請加入活動 ID: $activityId');
+      print('\n========== 申請加入活動 ==========');
+      print('活動 ID: $activityId');
+      print('Token: ${_authToken != null && _authToken!.isNotEmpty ? "已設定" : "未設定"}');
+      
       final response = await _dio.post('$baseUrl/activities/$activityId/join');
-      print('加入活動回應: ${response.statusCode}');
-      return response.statusCode == 200;
-    } catch (e) {
-      print('加入活動失敗: $e');
-      if (e is DioException && e.response != null) {
-        print('錯誤回應: ${e.response?.data}');
+      
+      print('申請回應狀態: ${response.statusCode}');
+      print('申請回應資料: ${response.data}');
+      print('========== 申請完成 ==========\n');
+      
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': response.data['message'] ?? '申請成功',
+          'data': response.data,
+        };
       }
-      return false;
+      
+      return {
+        'success': false,
+        'message': '申請失敗',
+      };
+    } catch (e) {
+      print('❌ 申請加入活動失敗: $e');
+      if (e is DioException && e.response != null) {
+        print('錯誤狀態碼: ${e.response?.statusCode}');
+        print('錯誤回應: ${e.response?.data}');
+        
+        // 處理特定錯誤
+        final errorData = e.response?.data;
+        if (errorData is Map && errorData.containsKey('detail')) {
+          return {
+            'success': false,
+            'message': errorData['detail'],
+          };
+        }
+      }
+      print('========== 申請失敗 ==========\n');
+      
+      return {
+        'success': false,
+        'message': '申請失敗，請稍後再試',
+      };
     }
   }
 
@@ -471,6 +513,171 @@ class ApiService {
     } catch (e) {
       print('取得參加活動失敗: $e');
       return [];
+    }
+  }
+
+  // 上傳活動照片（最多3張）
+  Future<Map<String, dynamic>> uploadActivityImages(String activityId, List<String> imagePaths) async {
+    try {
+      print('\n========== 上傳活動照片 ==========');
+      print('活動 ID: $activityId');
+      print('照片數量: ${imagePaths.length}');
+      
+      if (imagePaths.isEmpty) {
+        return {
+          'success': false,
+          'message': '請選擇至少一張照片',
+        };
+      }
+      
+      if (imagePaths.length > 3) {
+        return {
+          'success': false,
+          'message': '最多只能上傳 3 張照片',
+        };
+      }
+      
+      // 將 String ID 轉換為 int（後端 API 要求 int 類型）
+      final activityIdInt = int.tryParse(activityId);
+      if (activityIdInt == null) {
+        print('❌ 活動 ID 格式錯誤: $activityId');
+        return {
+          'success': false,
+          'message': '活動 ID 格式錯誤',
+        };
+      }
+      
+      print('轉換後的活動 ID (int): $activityIdInt');
+      
+      // 準備 multipart 表單
+      final formData = FormData();
+      
+      // Web 平台需要使用不同的方式處理檔案
+      for (var i = 0; i < imagePaths.length; i++) {
+        try {
+          // 檢查是否為 Web 平台的 blob URL
+          if (imagePaths[i].startsWith('blob:')) {
+            print('檢測到 Web 平台 blob URL: ${imagePaths[i]}');
+            return {
+              'success': false,
+              'message': 'Web 平台暫不支援照片上傳，請使用 App 版本',
+            };
+          }
+          
+          // 對於非 Web 平台，使用 fromFile
+          final file = await MultipartFile.fromFile(
+            imagePaths[i],
+            filename: 'image_$i.jpg',
+          );
+          formData.files.add(MapEntry('files', file));
+          print('添加照片 $i: ${imagePaths[i]}');
+        } catch (e) {
+          print('❌ 處理照片 $i 失敗: $e');
+          return {
+            'success': false,
+            'message': 'Web 平台暫不支援照片上傳，請使用 App 版本',
+          };
+        }
+      }
+      
+      final response = await _dio.post(
+        '$baseUrl/activities/$activityIdInt/upload-images',
+        data: formData,
+      );
+      
+      print('上傳回應狀態: ${response.statusCode}');
+      print('上傳回應資料: ${response.data}');
+      print('========== 上傳完成 ==========\n');
+      
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': response.data['message'] ?? '照片上傳成功',
+          'data': response.data,
+        };
+      }
+      
+      return {
+        'success': false,
+        'message': '上傳失敗',
+      };
+    } catch (e) {
+      print('❌ 上傳活動照片失敗: $e');
+      if (e is DioException && e.response != null) {
+        print('錯誤狀態碼: ${e.response?.statusCode}');
+        print('錯誤回應: ${e.response?.data}');
+        
+        final errorData = e.response?.data;
+        if (errorData is Map && errorData.containsKey('detail')) {
+          return {
+            'success': false,
+            'message': errorData['detail'],
+          };
+        }
+      }
+      print('========== 上傳失敗 ==========\n');
+      
+      return {
+        'success': false,
+        'message': 'Web 平台暫不支援照片上傳，請使用 App 版本',
+      };
+    }
+  }
+
+  // 上傳用戶大頭貼
+  Future<Map<String, dynamic>> uploadAvatar(String imagePath) async {
+    try {
+      print('\n========== 上傳用戶大頭貼 ==========');
+      print('照片路徑: $imagePath');
+      
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(
+          imagePath,
+          filename: 'avatar.jpg',
+        ),
+      });
+      
+      final response = await _dio.post(
+        '$baseUrl/users/upload/avatar',
+        data: formData,
+      );
+      
+      print('上傳回應狀態: ${response.statusCode}');
+      print('上傳回應資料: ${response.data}');
+      print('========== 上傳完成 ==========\n');
+      
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': '大頭貼上傳成功',
+          'data': response.data,
+        };
+      }
+      
+      return {
+        'success': false,
+        'message': '上傳失敗',
+      };
+    } catch (e) {
+      print('❌ 上傳大頭貼失敗: $e');
+      if (e is DioException && e.response != null) {
+        print('錯誤狀態碼: ${e.response?.statusCode}');
+        print('錯誤回應: ${e.response?.data}');
+        
+        final errorData = e.response?.data;
+        if (errorData is Map && errorData.containsKey('detail')) {
+          return {
+            'success': false,
+            'message': errorData['detail'],
+          };
+        }
+      }
+      print('========== 上傳失敗 ==========\n');
+      
+      return {
+        'success': false,
+        'message': '上傳失敗，請稍後再試',
+      };
     }
   }
 
