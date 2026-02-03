@@ -47,17 +47,19 @@ class ActivityPillMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 根據標題長度動態調整顯示
+    // 根據標題長度和是否有 LIVE 標籤動態調整顯示
+    // LIVE 標籤會占用額外空間，所以要減少標題字元數
     String displayTitle;
-    if (title.length <= 12) {
+    int maxChars = isLive ? 10 : 12; // LIVE 時顯示 10 個字，否則 12 個字
+    
+    if (title.length <= maxChars) {
       displayTitle = title;
     } else {
-      // 超過 12 個字元，顯示前 12 個 + ...
-      displayTitle = '${title.substring(0, 12)}...';
+      displayTitle = '${title.substring(0, maxChars)}...';
     }
     
     return SizedBox(
-      width: 200, // 再增加寬度
+      width: 1000, // 提升到 1000px
       height: 58,
       child: Stack(
         alignment: Alignment.center,
@@ -90,7 +92,7 @@ class ActivityPillMarker extends StatelessWidget {
         height: 36,
         constraints: const BoxConstraints(
           minWidth: 120,
-          maxWidth: 200, // 增加最大寬度
+          maxWidth: 1000, // 提升到 1000px
         ),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
@@ -126,7 +128,7 @@ class ActivityPillMarker extends StatelessWidget {
                   color: Color(0xFF2D3436),
                   height: 1.0,
                 ),
-                overflow: TextOverflow.visible, // 允許文字完整顯示
+                overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
             ),
@@ -335,8 +337,18 @@ class SelectedActivityMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 根據標題長度和是否有 LIVE 標籤動態調整顯示
+    String displayTitle;
+    int maxChars = isLive ? 10 : 12;
+    
+    if (title.length <= maxChars) {
+      displayTitle = title;
+    } else {
+      displayTitle = '${title.substring(0, maxChars)}...';
+    }
+    
     return SizedBox(
-      width: 180,
+      width: 1000, // 與普通標記一致
       height: 66,
       child: Stack(
         alignment: Alignment.center,
@@ -353,7 +365,7 @@ class SelectedActivityMarker extends StatelessWidget {
             top: 5,
             child: Transform.scale(
               scale: 1.04,
-              child: _buildPillContent(),
+              child: _buildPillContent(displayTitle),
             ),
           ),
         ],
@@ -361,7 +373,7 @@ class SelectedActivityMarker extends StatelessWidget {
     );
   }
 
-  Widget _buildPillContent() {
+  Widget _buildPillContent(String displayTitle) {
     return PhysicalModel(
       color: Colors.white.withOpacity(0.96),
       borderRadius: BorderRadius.circular(22),
@@ -369,6 +381,10 @@ class SelectedActivityMarker extends StatelessWidget {
       shadowColor: Colors.black.withOpacity(0.18),
       child: Container(
         height: 44,
+        constraints: const BoxConstraints(
+          minWidth: 120,
+          maxWidth: 1000, // 與普通標記一致
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(22),
@@ -384,19 +400,17 @@ class SelectedActivityMarker extends StatelessWidget {
             ],
             
             // 活動圖標
-            if (!isLive) ...[
-              Icon(
-                activityIcon,
-                size: 18,
-                color: const Color(0xFF00D0DD),
-              ),
-              const SizedBox(width: 6),
-            ],
+            Icon(
+              activityIcon,
+              size: 18,
+              color: const Color(0xFF00D0DD),
+            ),
+            const SizedBox(width: 6),
             
             // 標題
             Flexible(
               child: Text(
-                title,
+                displayTitle,
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

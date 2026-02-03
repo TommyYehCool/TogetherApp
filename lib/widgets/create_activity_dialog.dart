@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart' as picker;
 import '../services/activity_service.dart';
 import 'location_picker_dialog.dart';
 
@@ -86,6 +87,141 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  // 選擇開始時間 - 使用滾輪式選擇器
+  Future<void> _selectStartTime() async {
+    picker.DatePicker.showDateTimePicker(
+      context,
+      showTitleActions: true,
+      minTime: DateTime.now(),
+      maxTime: DateTime.now().add(const Duration(days: 365)),
+      currentTime: _startTime,
+      locale: picker.LocaleType.zh,
+      theme: const picker.DatePickerTheme(
+        backgroundColor: Colors.white,
+        itemStyle: TextStyle(
+          color: Color(0xFF2D3436),
+          fontWeight: FontWeight.w500,
+          fontSize: 18,
+        ),
+        doneStyle: TextStyle(
+          color: Color(0xFF00D0DD),
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+        cancelStyle: TextStyle(
+          color: Colors.grey,
+          fontSize: 16,
+        ),
+        titleHeight: 50,
+        containerHeight: 240,
+      ),
+      onConfirm: (date) {
+        setState(() {
+          _startTime = date;
+          // 自動調整結束時間（開始時間 + 2 小時）
+          if (_endTime.isBefore(_startTime)) {
+            _endTime = _startTime.add(const Duration(hours: 2));
+          }
+        });
+      },
+    );
+  }
+
+  // 選擇結束時間 - 使用滾輪式選擇器
+  Future<void> _selectEndTime() async {
+    picker.DatePicker.showDateTimePicker(
+      context,
+      showTitleActions: true,
+      minTime: _startTime,
+      maxTime: DateTime.now().add(const Duration(days: 365)),
+      currentTime: _endTime,
+      locale: picker.LocaleType.zh,
+      theme: const picker.DatePickerTheme(
+        backgroundColor: Colors.white,
+        itemStyle: TextStyle(
+          color: Color(0xFF2D3436),
+          fontWeight: FontWeight.w500,
+          fontSize: 18,
+        ),
+        doneStyle: TextStyle(
+          color: Color(0xFF00D0DD),
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+        cancelStyle: TextStyle(
+          color: Colors.grey,
+          fontSize: 16,
+        ),
+        titleHeight: 50,
+        containerHeight: 240,
+      ),
+      onConfirm: (date) {
+        if (date.isAfter(_startTime)) {
+          setState(() {
+            _endTime = date;
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('結束時間必須晚於開始時間'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  // 建立日期時間選擇器 UI
+  Widget _buildDateTimeSelector({
+    required IconData icon,
+    required String label,
+    required DateTime dateTime,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFF00D0DD), size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${dateTime.year}/${dateTime.month}/${dateTime.day} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF2D3436),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _createActivity() async {
@@ -187,10 +323,7 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
             ),
             child: Row(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
+                const SizedBox(width: 48), // 左側佔位
                 const Expanded(
                   child: Text(
                     '建立新活動',
@@ -201,7 +334,10 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 48),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ],
             ),
           ),
@@ -301,110 +437,21 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                     const SizedBox(height: 20),
 
                     // 開始時間
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.access_time, color: Color(0xFF00D0DD)),
-                      title: const Text(
-                        '開始時間',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      subtitle: Text(
-                        '${_startTime.month}/${_startTime.day} ${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: _startTime,
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime.now().add(const Duration(days: 365)),
-                        );
-                        
-                        if (date != null && mounted) {
-                          final time = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay.fromDateTime(_startTime),
-                          );
-                          
-                          if (time != null) {
-                            setState(() {
-                              _startTime = DateTime(
-                                date.year,
-                                date.month,
-                                date.day,
-                                time.hour,
-                                time.minute,
-                              );
-                              // 自動調整結束時間（開始時間 + 2 小時）
-                              if (_endTime.isBefore(_startTime)) {
-                                _endTime = _startTime.add(const Duration(hours: 2));
-                              }
-                            });
-                          }
-                        }
-                      },
+                    _buildDateTimeSelector(
+                      icon: Icons.access_time,
+                      label: '開始時間',
+                      dateTime: _startTime,
+                      onTap: () => _selectStartTime(),
                     ),
 
                     const SizedBox(height: 12),
 
                     // 結束時間
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.event_available, color: Color(0xFF00D0DD)),
-                      title: const Text(
-                        '結束時間',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      subtitle: Text(
-                        '${_endTime.month}/${_endTime.day} ${_endTime.hour.toString().padLeft(2, '0')}:${_endTime.minute.toString().padLeft(2, '0')}',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: _endTime,
-                          firstDate: _startTime,
-                          lastDate: DateTime.now().add(const Duration(days: 365)),
-                        );
-                        
-                        if (date != null && mounted) {
-                          final time = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay.fromDateTime(_endTime),
-                          );
-                          
-                          if (time != null) {
-                            final newEndTime = DateTime(
-                              date.year,
-                              date.month,
-                              date.day,
-                              time.hour,
-                              time.minute,
-                            );
-                            
-                            if (newEndTime.isAfter(_startTime)) {
-                              setState(() {
-                                _endTime = newEndTime;
-                              });
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('結束時間必須晚於開始時間'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          }
-                        }
-                      },
+                    _buildDateTimeSelector(
+                      icon: Icons.event_available,
+                      label: '結束時間',
+                      dateTime: _endTime,
+                      onTap: () => _selectEndTime(),
                     ),
 
                     const SizedBox(height: 20),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'screens/home_screen.dart';
@@ -38,6 +39,17 @@ class TogetherApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Together',
         debugShowCheckedModeBanner: false,
+        // 繁體中文支援
+        locale: const Locale('zh', 'TW'),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('zh', 'TW'), // 繁體中文
+          Locale('en', 'US'), // 英文
+        ],
         theme: ThemeData(
           primaryColor: const Color(0xFF00D0DD),
           scaffoldBackgroundColor: Colors.white,

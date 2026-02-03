@@ -32,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double _currentZoom = 17.0; // 追蹤當前地圖縮放等級
   bool _isMapGesturesEnabled = true; // 控制地圖手勢
   bool _isUpdatingMarkers = false; // 防止重複更新標記
+  bool _isPanelOpen = false; // 追蹤面板是否打開
   
   // 防抖動計時器
   Timer? _debounceTimer;
@@ -162,8 +163,8 @@ class _HomeScreenState extends State<HomeScreen> {
             isNearlyFull: activity.currentParticipants / activity.maxParticipants >= 0.8,
             isFull: activity.isFull,
           ).toBitmapDescriptor(
-            logicalSize: const Size(180, 66),
-            imageSize: const Size(540, 198),
+            logicalSize: const Size(1000, 66), // 與普通標記一致
+            imageSize: const Size(3000, 198), // 3x 高解析度
           );
           
           newMarkers.add(
@@ -262,8 +263,8 @@ class _HomeScreenState extends State<HomeScreen> {
             currentCount: activity.currentParticipants,
             maxCount: activity.maxParticipants,
           ).toBitmapDescriptor(
-            logicalSize: const Size(200, 58), // 增加寬度到 200
-            imageSize: const Size(600, 174), // 3x 高解析度
+            logicalSize: const Size(1000, 58), // 提升到 1000px
+            imageSize: const Size(3000, 174), // 3x 高解析度
           );
           print('  使用活動膠囊標記');
 
@@ -377,122 +378,139 @@ class _HomeScreenState extends State<HomeScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 標題
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: Colors.grey[200]!),
+      isScrollControlled: true, // 允許自訂高度
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6, // 初始高度 60%
+        minChildSize: 0.3, // 最小高度 30%
+        maxChildSize: 0.9, // 最大高度 90%
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // 拖曳指示器
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              child: Row(
-                children: [
-                  const Icon(Icons.location_on, color: Color(0xFF00D0DD)),
-                  const SizedBox(width: 8),
-                  Text(
-                    '此區域有 ${activities.length} 個活動',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+              // 標題
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey[200]!),
                   ),
-                ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.location_on, color: Color(0xFF00D0DD)),
+                    const SizedBox(width: 8),
+                    Text(
+                      '此區域有 ${activities.length} 個活動',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            // 活動列表
-            ListView.separated(
-              shrinkWrap: true,
-              itemCount: activities.length,
-              separatorBuilder: (context, index) => Divider(
-                height: 1,
-                color: Colors.grey[200],
-              ),
-              itemBuilder: (context, index) {
-                final activity = activities[index];
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: const Color(0xFF00D0DD).withAlpha(26),
-                    child: Icon(
-                      _getActivityIcon(activity.category),
-                      color: const Color(0xFF00D0DD),
-                      size: 20,
-                    ),
+              // 活動列表（使用 scrollController）
+              Expanded(
+                child: ListView.separated(
+                  controller: scrollController,
+                  itemCount: activities.length,
+                  separatorBuilder: (context, index) => Divider(
+                    height: 1,
+                    color: Colors.grey[200],
                   ),
-                  title: Text(
-                    activity.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
-                  subtitle: Text(
-                    '${activity.category} • ${activity.participantCount}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () async {
-                    // 保存選中的活動和必要的引用
-                    final selectedActivity = activity;
-                    final activityService = context.read<ActivityService>();
-                    
-                    print('📍 列表項目被點擊: ${selectedActivity.title}');
-                    
-                    // 關閉列表 bottom sheet
-                    Navigator.pop(context);
-                    
-                    // 立即設定選中的活動（在 context 還有效時）
-                    setState(() {
-                      _selectedActivityId = selectedActivity.id;
-                    });
-                    activityService.selectActivity(selectedActivity);
-                    
-                    // 立即更新標記（在關閉列表後）
-                    print('✅ 立即更新標記以反映新選中的活動...');
-                    await _updateMarkers();
-                    
-                    // 使用 Future 來延遲打開面板，避免動畫衝突
-                    Future.delayed(const Duration(milliseconds: 300), () async {
-                      if (!mounted) {
-                        print('❌ Widget 已經 unmounted');
-                        return;
-                      }
-                      
-                      print('✅ 正在打開面板...');
-                      print('✅ Panel 當前狀態: ${_panelController.isPanelOpen}');
-                      
-                      // 確保面板完全打開（即使已經打開也重新打開以觸發動畫）
-                      if (_panelController.isPanelOpen) {
-                        // 如果面板已經打開，先關閉再打開以觸發更新動畫
-                        print('✅ 面板已打開，先關閉...');
-                        await _panelController.close();
-                        // 等待關閉動畫完成
-                        await Future.delayed(const Duration(milliseconds: 200));
-                        if (mounted) {
-                          print('✅ 重新打開面板...');
-                          await _panelController.open();
-                        }
-                      } else {
-                        // 如果面板關閉，直接打開
-                        print('✅ 面板已關閉，直接打開...');
-                        await _panelController.open();
-                      }
-                      
-                      print('✅ 完成！');
-                    });
+                  itemBuilder: (context, index) {
+                    final activity = activities[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: const Color(0xFF00D0DD).withAlpha(26),
+                        child: Icon(
+                          _getActivityIcon(activity.category),
+                          color: const Color(0xFF00D0DD),
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        activity.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '${activity.category} • ${activity.participantCount}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () async {
+                        // 保存選中的活動和必要的引用
+                        final selectedActivity = activity;
+                        final activityService = context.read<ActivityService>();
+                        
+                        print('📍 列表項目被點擊: ${selectedActivity.title}');
+                        
+                        // 關閉列表 bottom sheet
+                        Navigator.pop(context);
+                        
+                        // 立即設定選中的活動（在 context 還有效時）
+                        setState(() {
+                          _selectedActivityId = selectedActivity.id;
+                        });
+                        activityService.selectActivity(selectedActivity);
+                        
+                        // 立即更新標記（在關閉列表後）
+                        print('✅ 立即更新標記以反映新選中的活動...');
+                        await _updateMarkers();
+                        
+                        // 使用 Future 來延遲打開面板，避免動畫衝突
+                        Future.delayed(const Duration(milliseconds: 300), () async {
+                          if (!mounted) {
+                            print('❌ Widget 已經 unmounted');
+                            return;
+                          }
+                          
+                          print('✅ 正在打開面板...');
+                          print('✅ Panel 當前狀態: ${_panelController.isPanelOpen}');
+                          
+                          // 確保面板完全打開（即使已經打開也重新打開以觸發動畫）
+                          if (_panelController.isPanelOpen) {
+                            // 如果面板已經打開，先關閉再打開以觸發更新動畫
+                            print('✅ 面板已打開，先關閉...');
+                            await _panelController.close();
+                            // 等待關閉動畫完成
+                            await Future.delayed(const Duration(milliseconds: 200));
+                            if (mounted) {
+                              print('✅ 重新打開面板...');
+                              await _panelController.open();
+                            }
+                          } else {
+                            // 如果面板關閉，直接打開
+                            print('✅ 面板已關閉，直接打開...');
+                            await _panelController.open();
+                          }
+                          
+                          print('✅ 完成！');
+                        });
+                      },
+                    );
                   },
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );
@@ -673,16 +691,27 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
         onPanelSlide: (position) {
-          // 當面板滑動時，根據位置禁用/啟用地圖手勢
+          // 當面板滑動時，根據位置禁用/啟用地圖手勢和按鈕
           // position: 0.0 (關閉) ~ 1.0 (完全打開)
-          if (position > 0.1 && _isMapGesturesEnabled) {
-            setState(() => _isMapGesturesEnabled = false);
-          } else if (position <= 0.1 && !_isMapGesturesEnabled) {
-            setState(() => _isMapGesturesEnabled = true);
+          if (position > 0.1) {
+            if (_isMapGesturesEnabled) {
+              setState(() => _isMapGesturesEnabled = false);
+            }
+            if (!_isPanelOpen) {
+              setState(() => _isPanelOpen = true);
+            }
+          } else {
+            if (!_isMapGesturesEnabled) {
+              setState(() => _isMapGesturesEnabled = true);
+            }
+            if (_isPanelOpen) {
+              setState(() => _isPanelOpen = false);
+            }
           }
         },
         onPanelClosed: () {
           // 面板關閉時，清除選中狀態，恢復 cluster 顯示
+          setState(() => _isPanelOpen = false);
           if (_selectedActivityId != null) {
             setState(() {
               _selectedActivityId = null;
@@ -770,11 +799,14 @@ class _HomeScreenState extends State<HomeScreen> {
             Positioned(
               bottom: 100,
               right: 16,
-              child: FloatingActionButton(
-                heroTag: 'myLocation',
-                onPressed: _goToMyLocation,
-                backgroundColor: Colors.white,
-                child: const Icon(Icons.my_location, color: Color(0xFF00D0DD)),
+              child: IgnorePointer(
+                ignoring: _isPanelOpen, // 面板打開時禁用按鈕
+                child: FloatingActionButton(
+                  heroTag: 'myLocation',
+                  onPressed: _goToMyLocation,
+                  backgroundColor: Colors.white,
+                  child: const Icon(Icons.my_location, color: Color(0xFF00D0DD)),
+                ),
               ),
             ),
 
@@ -782,16 +814,19 @@ class _HomeScreenState extends State<HomeScreen> {
             Positioned(
               bottom: 24,
               right: 16,
-              child: FloatingActionButton.extended(
-                heroTag: 'createActivity',
-                onPressed: _showCreateActivityDialog,
-                backgroundColor: const Color(0xFF00D0DD),
-                icon: const Icon(Icons.add, color: Colors.white),
-                label: const Text(
-                  '建立活動',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+              child: IgnorePointer(
+                ignoring: _isPanelOpen, // 面板打開時禁用按鈕
+                child: FloatingActionButton.extended(
+                  heroTag: 'createActivity',
+                  onPressed: _showCreateActivityDialog,
+                  backgroundColor: const Color(0xFF00D0DD),
+                  icon: const Icon(Icons.add, color: Colors.white),
+                  label: const Text(
+                    '建立活動',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -876,10 +911,17 @@ class ActivitySearchDelegate extends SearchDelegate<String> {
   @override
   List<Widget> buildActions(BuildContext context) {
     return [
+      if (query.isNotEmpty)
+        IconButton(
+          icon: const Icon(Icons.clear),
+          onPressed: () {
+            query = '';
+          },
+        ),
       IconButton(
-        icon: const Icon(Icons.clear),
+        icon: const Icon(Icons.close),
         onPressed: () {
-          query = '';
+          close(context, '');
         },
       ),
     ];
