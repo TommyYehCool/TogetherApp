@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:geocoding/geocoding.dart';
 import '../services/activity_service.dart';
 import 'location_picker_dialog.dart';
 
@@ -26,6 +27,8 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
   String _selectedCategory = '社交';
   int _maxParticipants = 5;
   late LatLng _selectedLocation;
+  String _locationAddress = '載入地址中...';
+  bool _isLoadingAddress = false;
 
   final List<String> _categories = [
     '社交', '運動', '學習', '美食', '旅遊', '音樂', '藝術', '其他'
@@ -35,6 +38,43 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
   void initState() {
     super.initState();
     _selectedLocation = widget.initialPosition;
+    _getAddressFromLocation(_selectedLocation);
+  }
+
+  // 從經緯度取得地址
+  Future<void> _getAddressFromLocation(LatLng location) async {
+    setState(() => _isLoadingAddress = true);
+    
+    try {
+      final placemarks = await placemarkFromCoordinates(
+        location.latitude,
+        location.longitude,
+      );
+      
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        String address = '${place.street ?? ''} ${place.subLocality ?? ''} ${place.locality ?? ''}'.trim();
+        
+        if (address.isEmpty) {
+          address = '${place.country ?? ''} ${place.administrativeArea ?? ''}'.trim();
+        }
+        
+        if (address.isEmpty) {
+          address = '${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}';
+        }
+        
+        setState(() {
+          _locationAddress = address;
+          _isLoadingAddress = false;
+        });
+      }
+    } catch (e) {
+      print('取得地址失敗: $e');
+      setState(() {
+        _locationAddress = '${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}';
+        _isLoadingAddress = false;
+      });
+    }
   }
 
   @override
@@ -73,6 +113,19 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
       ),
     );
 
+    // 從完整地址中提取地區（取前面的部分作為 region）
+    String region = _locationAddress;
+    String address = _locationAddress;
+    
+    // 嘗試從地址中提取地區（例如：台北市、新北市等）
+    final regionMatch = RegExp(r'([\u4e00-\u9fa5]+[市縣])').firstMatch(_locationAddress);
+    if (regionMatch != null) {
+      region = regionMatch.group(1) ?? _locationAddress;
+    }
+    
+    print('地區: $region');
+    print('地址: $address');
+
     final activity = await service.createActivity(
       title: _titleController.text,
       description: _descriptionController.text,
@@ -80,6 +133,8 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
       longitude: _selectedLocation.longitude,
       maxParticipants: _maxParticipants,
       activityType: _selectedCategory,
+      region: region,
+      address: address,
     );
 
     if (mounted) {
@@ -243,11 +298,34 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.location_on, color: Color(0xFF00D0DD)),
-                      title: const Text('活動地點'),
-                      subtitle: Text(
-                        '緯度: ${_selectedLocation.latitude.toStringAsFixed(4)}, 經度: ${_selectedLocation.longitude.toStringAsFixed(4)}',
-                        style: const TextStyle(fontSize: 12),
+                      title: const Text(
+                        '活動地點',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
+                      subtitle: _isLoadingAddress
+                          ? const Row(
+                              children: [
+                                SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF00D0DD),
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Text('載入地址中...'),
+                              ],
+                            )
+                          : Text(
+                              _locationAddress,
+                              style: const TextStyle(fontSize: 13),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () async {
                         final result = await Navigator.push<LatLng>(
@@ -263,6 +341,8 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                           setState(() {
                             _selectedLocation = result;
                           });
+                          // 更新地址
+                          await _getAddressFromLocation(result);
                         }
                       },
                     ),

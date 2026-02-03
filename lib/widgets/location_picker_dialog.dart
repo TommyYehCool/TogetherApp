@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:dio/dio.dart';
+import '../config/env_config.dart';
 
 class LocationPickerDialog extends StatefulWidget {
   final LatLng initialPosition;
@@ -48,8 +49,8 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
   bool _showSuggestions = false;
   final Dio _dio = Dio();
   
-  // 請在這裡設定你的 Google Maps API Key
-  static const String _apiKey = 'YOUR_GOOGLE_MAPS_API_KEY';
+  // 從環境變數取得 Google Maps API Key
+  String get _apiKey => EnvConfig.googleMapsApiKey;
 
   @override
   void initState() {
@@ -114,9 +115,32 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
   Future<void> _getPlaceSuggestions(String input) async {
     if (input.isEmpty) return;
 
+    // 檢查 API Key
+    if (_apiKey == 'YOUR_GOOGLE_MAPS_API_KEY') {
+      print('❌ 錯誤：API Key 尚未設定！');
+      print('請到 lib/widgets/location_picker_dialog.dart 第 57 行設定你的 API Key');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('請先設定 Google Maps API Key'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    print('\n========== 搜尋地址 ==========');
+    print('搜尋關鍵字: $input');
+    print('API Key: ${_apiKey.substring(0, 10)}...');
+
     try {
+      final url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json';
+      print('請求 URL: $url');
+      
       final response = await _dio.get(
-        'https://maps.googleapis.com/maps/api/place/autocomplete/json',
+        url,
         queryParameters: {
           'input': input,
           'key': _apiKey,
@@ -127,17 +151,60 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
         },
       );
 
+      print('回應狀態: ${response.data['status']}');
+      
       if (response.data['status'] == 'OK') {
         final predictions = response.data['predictions'] as List;
+        print('找到 ${predictions.length} 個建議');
+        
         setState(() {
           _suggestions = predictions
               .map((p) => PlaceSuggestion.fromJson(p))
               .toList();
           _showSuggestions = true;
         });
+        
+        print('✅ 建議列表已更新');
+      } else if (response.data['status'] == 'REQUEST_DENIED') {
+        print('❌ API 請求被拒絕');
+        print('錯誤訊息: ${response.data['error_message']}');
+        print('可能原因：');
+        print('1. API Key 無效');
+        print('2. Places API 未啟用');
+        print('3. API Key 有使用限制');
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('API 請求被拒絕: ${response.data['error_message'] ?? '請檢查 API Key 設定'}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      } else if (response.data['status'] == 'ZERO_RESULTS') {
+        print('⚠️ 沒有找到結果');
+        setState(() {
+          _suggestions = [];
+          _showSuggestions = false;
+        });
+      } else {
+        print('⚠️ 其他狀態: ${response.data['status']}');
+        print('錯誤訊息: ${response.data['error_message']}');
       }
+      
+      print('========== 搜尋完成 ==========\n');
     } catch (e) {
-      print('取得地點建議失敗: $e');
+      print('❌ 取得地點建議失敗: $e');
+      if (e is DioException) {
+        print('錯誤類型: ${e.type}');
+        print('錯誤訊息: ${e.message}');
+        if (e.response != null) {
+          print('回應狀態碼: ${e.response?.statusCode}');
+          print('回應資料: ${e.response?.data}');
+        }
+      }
+      print('========== 搜尋失敗 ==========\n');
     }
   }
 

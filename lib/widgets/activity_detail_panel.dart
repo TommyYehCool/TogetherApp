@@ -121,6 +121,16 @@ class ActivityDetailPanel extends StatelessWidget {
 
                       const SizedBox(height: 12),
 
+                      // 地點（地區 + 地址）
+                      _buildInfoRow(
+                        Icons.location_on,
+                        activity.region != null && activity.region!.isNotEmpty
+                            ? '${activity.region} ${activity.address ?? ''}'.trim()
+                            : activity.fullAddress,
+                      ),
+
+                      const SizedBox(height: 12),
+
                       // 主辦人
                       _buildInfoRow(
                         Icons.person,

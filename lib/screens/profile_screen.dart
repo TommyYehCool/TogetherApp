@@ -286,37 +286,93 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('加入請求'),
+        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
         content: requests.isEmpty
-            ? const Text('目前沒有加入請求')
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Text('目前沒有加入請求'),
+              )
             : SizedBox(
                 width: double.maxFinite,
-                child: ListView.builder(
+                child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: requests.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final request = requests[index];
-                    return ListTile(
-                      leading: const CircleAvatar(
-                        child: Icon(Icons.person),
-                      ),
-                      title: Text(request['user_name'] ?? '使用者'),
-                      subtitle: Text(request['requested_at'] ?? ''),
-                      trailing: ElevatedButton(
-                        onPressed: () async {
-                          final success = await service.approveJoinRequest(
-                            request['request_id'],
-                          );
-                          if (success && mounted) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('已批准加入')),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00D0DD),
-                        ),
-                        child: const Text('批准'),
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          // 使用者頭像
+                          CircleAvatar(
+                            backgroundColor: const Color(0xFF00D0DD).withOpacity(0.1),
+                            child: const Icon(
+                              Icons.person,
+                              color: Color(0xFF00D0DD),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          // 使用者資訊
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  request['user_name'] ?? '使用者',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  request['requested_at'] ?? '',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          // 批准按鈕
+                          ElevatedButton(
+                            onPressed: () async {
+                              final success = await service.approveJoinRequest(
+                                request['request_id'],
+                              );
+                              if (success && mounted) {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('已批准加入'),
+                                    backgroundColor: Color(0xFF00D0DD),
+                                  ),
+                                );
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00D0DD),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 10,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text(
+                              '批准',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -325,7 +381,14 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('關閉'),
+            child: const Text(
+              '關閉',
+              style: TextStyle(
+                color: Color(0xFF00D0DD),
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),

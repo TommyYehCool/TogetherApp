@@ -78,6 +78,8 @@ class ActivityService extends ChangeNotifier {
     required double longitude,
     required int maxParticipants,
     required String activityType,
+    required String region,      // 新增必填欄位：地區
+    required String address,     // 新增必填欄位：詳細地址
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -90,6 +92,8 @@ class ActivityService extends ChangeNotifier {
       longitude: longitude,
       maxParticipants: maxParticipants,
       activityType: activityType,
+      region: region,
+      address: address,
     );
 
     if (activity != null) {

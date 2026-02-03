@@ -1,22 +1,23 @@
 import 'package:dio/dio.dart';
+import 'package:geocoding/geocoding.dart';
 import '../models/activity.dart';
+import '../config/env_config.dart';
 
 class ApiService {
   final Dio _dio;
   final String baseUrl;
   String? _authToken;
 
-  // 固定的測試 Token（開發用）
-  static const String _devToken = ''; // 請在設定頁面輸入你的 Token
-
   ApiService({String? baseUrl})
-      : baseUrl = baseUrl ?? 'https://helpful-noticeably-bullfrog.ngrok-free.app',
+      : baseUrl = baseUrl ?? EnvConfig.apiBaseUrl,
         _dio = Dio(BaseOptions(
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
         )) {
-    // 預設使用開發 Token
-    _authToken = _devToken;
+    // 使用環境變數中的開發 Token（如果有設定）
+    _authToken = EnvConfig.devBearerToken.isNotEmpty 
+        ? EnvConfig.devBearerToken 
+        : '';
     
     // 設定攔截器，自動加入 Token
     _dio.interceptors.add(InterceptorsWrapper(
@@ -94,6 +95,47 @@ class ApiService {
         for (var i = 0; i < data.length; i++) {
           try {
             final activity = Activity.fromJson(data[i]);
+            
+            // 如果活動沒有地址，嘗試取得地址
+            if (activity.address == null || activity.address!.isEmpty) {
+              try {
+                final placemarks = await placemarkFromCoordinates(
+                  activity.latitude,
+                  activity.longitude,
+                );
+                
+                if (placemarks.isNotEmpty) {
+                  final place = placemarks.first;
+                  String address = '${place.street ?? ''} ${place.subLocality ?? ''} ${place.locality ?? ''}'.trim();
+                  if (address.isEmpty) {
+                    address = '${place.country ?? ''} ${place.administrativeArea ?? ''}'.trim();
+                  }
+                  
+                  // 創建新的 Activity 實例包含地址
+                  final enrichedActivity = Activity(
+                    id: activity.id,
+                    title: activity.title,
+                    description: activity.description,
+                    latitude: activity.latitude,
+                    longitude: activity.longitude,
+                    startTime: activity.startTime,
+                    maxParticipants: activity.maxParticipants,
+                    currentParticipants: activity.currentParticipants,
+                    category: activity.category,
+                    hostId: activity.hostId,
+                    hostName: activity.hostName,
+                    isBoosted: activity.isBoosted,
+                    address: address,
+                  );
+                  activities.add(enrichedActivity);
+                  print('  [$i] ${activity.title} at $address');
+                  continue;
+                }
+              } catch (e) {
+                print('  [$i] 取得地址失敗: $e');
+              }
+            }
+            
             activities.add(activity);
             print('  [$i] ${activity.title} at (${activity.latitude}, ${activity.longitude})');
           } catch (e) {
@@ -127,6 +169,8 @@ class ApiService {
     required double longitude,
     required int maxParticipants,
     required String activityType,
+    required String region,      // 必填：地區
+    required String address,     // 必填：詳細地址
   }) async {
     print('\n========== 建立活動開始 ==========');
     print('Token 狀態: ${_authToken != null && _authToken!.isNotEmpty ? "已設定" : "未設定"}');
@@ -140,7 +184,9 @@ class ApiService {
       print('  lat: $latitude,');
       print('  lng: $longitude,');
       print('  max_slots: $maxParticipants,');
-      print('  activity_type: $activityType');
+      print('  activity_type: $activityType,');
+      print('  region: $region,');
+      print('  address: $address');
       print('}');
       
       print('\n發送 HTTP POST 請求...');
@@ -154,6 +200,8 @@ class ApiService {
           'lng': longitude,
           'max_slots': maxParticipants,
           'activity_type': activityType,
+          'region': region,
+          'address': address,
         },
       );
 
@@ -161,26 +209,29 @@ class ApiService {
       print('回應資料: ${response.data}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        // 後端只回傳 {"status": "success", "activity_id": 9}
-        // 需要建立本地 Activity 物件
-        final activityId = response.data['activity_id'];
+        // 解析後端回應
+        final data = response.data;
         
-        print('活動建立成功，ID: $activityId');
+        print('活動建立成功');
         print('========== 建立活動成功 ==========\n');
         
         return Activity(
-          id: activityId.toString(),
-          title: title,
-          description: description,
-          latitude: latitude,
-          longitude: longitude,
-          startTime: DateTime.now(),
-          maxParticipants: maxParticipants,
-          currentParticipants: 1,
-          category: activityType,
-          hostId: 'current_user',
-          hostName: '我',
-          isBoosted: false,
+          id: data['id']?.toString() ?? 'unknown',
+          title: data['title'] ?? title,
+          description: data['description'] ?? description,
+          latitude: (data['lat'] ?? latitude).toDouble(),
+          longitude: (data['lng'] ?? longitude).toDouble(),
+          startTime: data['start_time'] != null 
+              ? DateTime.parse(data['start_time'])
+              : DateTime.now(),
+          maxParticipants: data['max_slots'] ?? maxParticipants,
+          currentParticipants: data['current_participants'] ?? 1,
+          category: data['activity_type'] ?? activityType,
+          hostId: data['host_id']?.toString() ?? 'current_user',
+          hostName: data['host_name'] ?? '我',
+          isBoosted: data['is_boosted'] ?? false,
+          address: data['address'] ?? address,
+          region: data['region'] ?? region,
         );
       }
       return null;
@@ -212,13 +263,15 @@ class ApiService {
         hostId: 'mock_user',
         hostName: '我',
         isBoosted: false,
+        address: address, // 使用傳入的地址
       );
     }
   }
 
-  // 搜尋活動（新增）
+  // 搜尋活動
   Future<List<Activity>> searchActivities({
     String? query,
+    String? region,          // 新增：地區篩選
     String? activityType,
     bool onlyAvailable = true,
     int limit = 20,
@@ -227,14 +280,16 @@ class ApiService {
     try {
       print('\n========== 搜尋活動 ==========');
       print('關鍵字: $query');
+      print('地區: $region');
       print('類型: $activityType');
       print('只顯示可參加: $onlyAvailable');
       
       final response = await _dio.get(
         '$baseUrl/activities/search',
         queryParameters: {
-          if (query != null) 'query': query,
-          if (activityType != null) 'activity_type': activityType,
+          if (query != null && query.isNotEmpty) 'query': query,
+          if (region != null && region.isNotEmpty) 'region': region,
+          if (activityType != null && activityType.isNotEmpty) 'activity_type': activityType,
           'only_available': onlyAvailable,
           'limit': limit,
           'offset': offset,
@@ -252,6 +307,47 @@ class ApiService {
         for (var i = 0; i < data.length; i++) {
           try {
             final activity = Activity.fromJson(data[i]);
+            
+            // 如果活動沒有地址，嘗試取得地址
+            if (activity.address == null || activity.address!.isEmpty) {
+              try {
+                final placemarks = await placemarkFromCoordinates(
+                  activity.latitude,
+                  activity.longitude,
+                );
+                
+                if (placemarks.isNotEmpty) {
+                  final place = placemarks.first;
+                  String address = '${place.street ?? ''} ${place.subLocality ?? ''} ${place.locality ?? ''}'.trim();
+                  if (address.isEmpty) {
+                    address = '${place.country ?? ''} ${place.administrativeArea ?? ''}'.trim();
+                  }
+                  
+                  // 創建新的 Activity 實例包含地址
+                  final enrichedActivity = Activity(
+                    id: activity.id,
+                    title: activity.title,
+                    description: activity.description,
+                    latitude: activity.latitude,
+                    longitude: activity.longitude,
+                    startTime: activity.startTime,
+                    maxParticipants: activity.maxParticipants,
+                    currentParticipants: activity.currentParticipants,
+                    category: activity.category,
+                    hostId: activity.hostId,
+                    hostName: activity.hostName,
+                    isBoosted: activity.isBoosted,
+                    address: address,
+                  );
+                  activities.add(enrichedActivity);
+                  print('  [$i] ${activity.title} - ${activity.category} at $address');
+                  continue;
+                }
+              } catch (e) {
+                print('  [$i] 取得地址失敗: $e');
+              }
+            }
+            
             activities.add(activity);
             print('  [$i] ${activity.title} - ${activity.category}');
           } catch (e) {

@@ -46,3 +46,8 @@ app.*.map.json
 # API Keys (重要：不要提交 API Key)
 **/android/app/src/main/AndroidManifest.xml
 **/ios/Runner/AppDelegate.swift
+
+# 環境變數檔案
+.env
+.env.local
+.env.*.local
