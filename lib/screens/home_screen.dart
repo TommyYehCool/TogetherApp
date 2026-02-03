@@ -306,6 +306,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // 處理標記點擊事件
   void _onMarkerTap(Activity tappedActivity) async {
+    // 如果有對話框打開，忽略點擊
+    if (_isPanelOpen) {
+      print('⚠️ 對話框已打開，忽略 Marker 點擊');
+      return;
+    }
+    
     // 直接顯示活動詳情（重疊檢測已在 _updateMarkers 中處理）
     setState(() {
       _selectedActivityId = tappedActivity.id;
@@ -375,13 +381,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // 顯示附近活動列表
   void _showNearbyActivitiesList(List<Activity> activities) {
+    // 如果有對話框打開，忽略點擊
+    if (_isPanelOpen) {
+      print('⚠️ 對話框已打開，忽略 Cluster 點擊');
+      return;
+    }
+    
     showModalBottomSheet(
       context: context,
       isDismissible: false,
       enableDrag: true, // 允許拖曳但不允許點擊外部關閉
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.5),
       isScrollControlled: true, // 允許自訂高度
-      builder: (context) => DraggableScrollableSheet(
+      builder: (context) => GestureDetector(
+        onTap: () {}, // 攔截所有點擊，防止穿透
+        behavior: HitTestBehavior.opaque, // 關鍵：讓透明區域也能攔截點擊
+        child: DraggableScrollableSheet(
         initialChildSize: 0.6, // 初始高度 60%
         minChildSize: 0.3, // 最小高度 30%
         maxChildSize: 0.9, // 最大高度 90%
@@ -513,8 +529,9 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 16),
             ],
           ),
-        ),
-      ),
+        ), // Container
+      ), // DraggableScrollableSheet
+      ), // GestureDetector
     );
   }
 
@@ -625,8 +642,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showCreateActivityDialog() async {
-    // 禁用地圖手勢
-    setState(() => _isMapGesturesEnabled = false);
+    // 禁用地圖手勢和標記點擊
+    setState(() {
+      _isMapGesturesEnabled = false;
+      _isPanelOpen = true; // 設為 true 來禁用所有地圖互動
+    });
     
     final result = await showModalBottomSheet<bool>(
       context: context,
@@ -634,23 +654,31 @@ class _HomeScreenState extends State<HomeScreen> {
       enableDrag: false,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => CreateActivityDialog(
-        initialPosition: _currentPosition,
-        onActivityCreated: () async {
-          // 重新載入附近活動
-          await context.read<ActivityService>().loadNearbyActivities(
-            _currentPosition.latitude,
-            _currentPosition.longitude,
-            radiusMeters: 300,
-          );
-          // 更新地圖標記
-          await _updateMarkers();
-        },
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (context) => GestureDetector(
+        onTap: () {}, // 攔截所有點擊，防止穿透
+        behavior: HitTestBehavior.opaque, // 關鍵：讓透明區域也能攔截點擊
+        child: CreateActivityDialog(
+          initialPosition: _currentPosition,
+          onActivityCreated: () async {
+            // 重新載入附近活動
+            await context.read<ActivityService>().loadNearbyActivities(
+              _currentPosition.latitude,
+              _currentPosition.longitude,
+              radiusMeters: 300,
+            );
+            // 更新地圖標記
+            await _updateMarkers();
+          },
+        ),
       ),
     );
     
-    // 恢復地圖手勢
-    setState(() => _isMapGesturesEnabled = true);
+    // 恢復地圖手勢和標記點擊
+    setState(() {
+      _isMapGesturesEnabled = true;
+      _isPanelOpen = false;
+    });
     
     // 如果成功建立活動，重新載入地圖
     if (result == true && mounted) {
