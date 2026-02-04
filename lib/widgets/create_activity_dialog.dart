@@ -290,6 +290,7 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
     final token = service.apiService.currentToken;
     print('\n========== 準備建立活動 ==========');
     print('Token 狀態: ${token != null && token.isNotEmpty ? "已設定 (${token.substring(0, 20)}...)" : "❌ 未設定"}');
+    print('選擇的照片數量: ${_selectedImages.length}');
     
     if (token == null || token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -305,8 +306,18 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(color: Color(0xFF00D0DD)),
+      builder: (context) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: Color(0xFF00D0DD)),
+            const SizedBox(height: 16),
+            Text(
+              _selectedImages.isNotEmpty ? '建立活動並上傳照片中...' : '建立活動中...',
+              style: const TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
       ),
     );
 
@@ -323,6 +334,14 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
     print('地區: $region');
     print('地址: $address');
 
+    // 準備照片路徑（如果有選擇照片）
+    List<String>? imagePaths;
+    if (_selectedImages.isNotEmpty) {
+      imagePaths = _selectedImages.map((img) => img.path).toList();
+      print('照片路徑: $imagePaths');
+    }
+
+    // 建立活動（同時上傳照片）
     final activity = await service.createActivity(
       title: _titleController.text,
       description: _descriptionController.text,
@@ -332,8 +351,9 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
       activityType: _selectedCategory,
       region: region,
       address: address,
-      startTime: _startTime,      // 新增
-      endTime: _endTime,          // 新增
+      startTime: _startTime,
+      endTime: _endTime,
+      imagePaths: imagePaths, // 傳遞照片路徑
     );
 
     if (mounted) {
@@ -342,64 +362,17 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
       if (activity != null) {
         print('\n========== 活動建立成功 ==========');
         print('活動 ID: ${activity.id}');
-        print('活動 ID 類型: ${activity.id.runtimeType}');
-        print('選擇的照片數量: ${_selectedImages.length}');
         
-        // 如果有選擇照片，上傳照片
-        if (_selectedImages.isNotEmpty) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(color: Color(0xFF00D0DD)),
-                  SizedBox(height: 16),
-                  Text(
-                    '正在上傳照片...',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ],
-              ),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _selectedImages.isNotEmpty 
+                ? '✅ 活動建立成功，已上傳 ${_selectedImages.length} 張照片！'
+                : '✅ 活動建立成功！'
             ),
-          );
-          
-          print('準備上傳照片...');
-          final imagePaths = _selectedImages.map((img) => img.path).toList();
-          print('照片路徑: $imagePaths');
-          
-          final uploadResult = await service.uploadActivityImages(activity.id, imagePaths);
-          
-          print('上傳結果: $uploadResult');
-          
-          if (mounted) {
-            Navigator.pop(context); // 關閉上傳對話框
-            
-            if (uploadResult['success']) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('✅ 活動建立成功，照片上傳成功！'),
-                  backgroundColor: Color(0xFF00D0DD),
-                ),
-              );
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('活動建立成功，但照片上傳失敗：${uploadResult['message']}'),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-            }
-          }
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ 活動建立成功！'),
-              backgroundColor: Color(0xFF00D0DD),
-            ),
-          );
-        }
+            backgroundColor: const Color(0xFF00D0DD),
+          ),
+        );
         
         widget.onActivityCreated();
         Navigator.pop(context); // 關閉建立對話框

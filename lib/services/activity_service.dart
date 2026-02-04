@@ -152,9 +152,10 @@ class ActivityService extends ChangeNotifier {
     required String activityType,
     required String region,
     required String address,
-    required DateTime startTime,      // 新增必填
-    required DateTime endTime,        // 新增必填
-    DateTime? registrationDeadline,   // 新增選填
+    required DateTime startTime,
+    required DateTime endTime,
+    DateTime? registrationDeadline,
+    List<String>? imagePaths, // 新增：照片路徑列表
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -172,6 +173,7 @@ class ActivityService extends ChangeNotifier {
       startTime: startTime,
       endTime: endTime,
       registrationDeadline: registrationDeadline,
+      imagePaths: imagePaths, // 傳遞照片路徑
     );
 
     if (activity != null) {
