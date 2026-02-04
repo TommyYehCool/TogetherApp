@@ -56,35 +56,134 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
   Future<void> _getAddressFromLocation(LatLng location) async {
     setState(() => _isLoadingAddress = true);
     
+    print('\n========== 開始取得地址 ==========');
+    print('經緯度: ${location.latitude}, ${location.longitude}');
+    print('平台: ${kIsWeb ? "Web" : "Native"}');
+    
+    // 在 Web 平台上跳過地址解析（因為有 CORS 問題）
+    if (kIsWeb) {
+      print('⚠️ Web 平台不支援地址解析，使用經緯度');
+      setState(() {
+        _locationAddress = '經緯度: ${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}';
+        _isLoadingAddress = false;
+      });
+      return;
+    }
+    
     try {
+      print('正在呼叫 placemarkFromCoordinates...');
+      
       final placemarks = await placemarkFromCoordinates(
         location.latitude,
         location.longitude,
       );
       
+      print('✅ API 呼叫成功');
+      print('取得 ${placemarks.length} 個地標');
+      
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
-        String address = '${place.street ?? ''} ${place.subLocality ?? ''} ${place.locality ?? ''}'.trim();
         
-        if (address.isEmpty) {
-          address = '${place.country ?? ''} ${place.administrativeArea ?? ''}'.trim();
+        // 詳細列印所有欄位
+        print('\n地標詳細資訊:');
+        print('  name: ${place.name}');
+        print('  street: ${place.street}');
+        print('  subLocality: ${place.subLocality}');
+        print('  locality: ${place.locality}');
+        print('  subAdministrativeArea: ${place.subAdministrativeArea}');
+        print('  administrativeArea: ${place.administrativeArea}');
+        print('  postalCode: ${place.postalCode}');
+        print('  country: ${place.country}');
+        print('  isoCountryCode: ${place.isoCountryCode}');
+        
+        // 組合完整地址
+        String fullAddress = '';
+        if (place.street != null && place.street!.isNotEmpty) {
+          fullAddress = place.street!;
+        }
+        if (place.subLocality != null && place.subLocality!.isNotEmpty) {
+          fullAddress = fullAddress.isEmpty ? place.subLocality! : '$fullAddress, ${place.subLocality}';
+        }
+        if (place.locality != null && place.locality!.isNotEmpty) {
+          fullAddress = fullAddress.isEmpty ? place.locality! : '$fullAddress, ${place.locality}';
         }
         
-        if (address.isEmpty) {
-          address = '${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}';
+        // 如果還是空的，使用行政區域
+        if (fullAddress.isEmpty) {
+          if (place.administrativeArea != null) {
+            fullAddress = place.administrativeArea!;
+          }
+          if (place.country != null) {
+            fullAddress = fullAddress.isEmpty ? place.country! : '${place.country}, $fullAddress';
+          }
         }
+        
+        // 如果還是空的，使用經緯度
+        if (fullAddress.isEmpty) {
+          fullAddress = '經緯度: ${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}';
+        }
+        
+        print('組合後的地址: $fullAddress');
         
         setState(() {
-          _locationAddress = address;
+          _locationAddress = fullAddress;
           _isLoadingAddress = false;
         });
+        
+        print('✅ 地址解析成功');
+        print('========== 取得地址完成 ==========\n');
+      } else {
+        throw Exception('placemarks 列表為空');
       }
-    } catch (e) {
-      print('取得地址失敗: $e');
+    } catch (e, stackTrace) {
+      print('\n❌ 取得地址失敗');
+      print('錯誤類型: ${e.runtimeType}');
+      print('錯誤訊息: $e');
+      print('堆疊追蹤:');
+      print(stackTrace);
+      print('========== 取得地址失敗 ==========\n');
+      
+      // 失敗時顯示經緯度
       setState(() {
-        _locationAddress = '${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}';
+        _locationAddress = '經緯度: ${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}';
         _isLoadingAddress = false;
       });
+      
+      // 只在非 Web 平台顯示錯誤訊息
+      if (mounted && !kIsWeb) {
+        final errorMsg = e.toString();
+        final shortMsg = errorMsg.length > 50 ? '${errorMsg.substring(0, 50)}...' : errorMsg;
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚠️ 無法取得地址: $shortMsg'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: '查看',
+              textColor: Colors.white,
+              onPressed: () {
+                // 顯示完整錯誤訊息
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('地址解析錯誤'),
+                    content: SingleChildScrollView(
+                      child: Text('$e\n\n可能原因:\n1. 網路連線問題\n2. Google Maps API 配額限制\n3. 該位置沒有地址資訊'),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('確定'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -231,6 +330,17 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
     );
   }
 
+  // 格式化日期時間顯示
+  String _formatDateTime(DateTime dateTime) {
+    final year = dateTime.year;
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    
+    return '$year/$month/$day $hour:$minute';
+  }
+
   // 建立日期時間選擇器 UI
   Widget _buildDateTimeSelector({
     required IconData icon,
@@ -264,7 +374,7 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${dateTime.year}/${dateTime.month}/${dateTime.day} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}',
+                    _formatDateTime(dateTime),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -561,38 +671,7 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                     const SizedBox(height: 20),
 
                     // 活動地點
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.location_on, color: Color(0xFF00D0DD)),
-                      title: const Text(
-                        '活動地點',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      subtitle: _isLoadingAddress
-                          ? const Row(
-                              children: [
-                                SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Color(0xFF00D0DD),
-                                  ),
-                                ),
-                                SizedBox(width: 8),
-                                Text('載入地址中...'),
-                              ],
-                            )
-                          : Text(
-                              _locationAddress,
-                              style: const TextStyle(fontSize: 13),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                      trailing: const Icon(Icons.chevron_right),
+                    InkWell(
                       onTap: () async {
                         final result = await Navigator.push<LatLng>(
                           context,
@@ -611,6 +690,72 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                           await _getAddressFromLocation(result);
                         }
                       },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.location_on, color: Color(0xFF00D0DD), size: 24),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    '活動地點',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  _isLoadingAddress
+                                      ? const Row(
+                                          children: [
+                                            SizedBox(
+                                              width: 12,
+                                              height: 12,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Color(0xFF00D0DD),
+                                              ),
+                                            ),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              '載入地址中...',
+                                              style: TextStyle(fontSize: 14),
+                                            ),
+                                          ],
+                                        )
+                                      : Text(
+                                          _locationAddress,
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF2D3436),
+                                          ),
+                                          maxLines: 3,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '點擊以在地圖上選擇位置',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right, color: Colors.grey),
+                          ],
+                        ),
+                      ),
                     ),
 
                     const SizedBox(height: 20),
