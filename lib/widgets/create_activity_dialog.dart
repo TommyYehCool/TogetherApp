@@ -499,50 +499,53 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          // 標題列
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: Colors.grey[200]!),
+    return GestureDetector(
+      // 點擊空白處關閉鍵盤
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            // 標題列
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey[200]!),
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                const SizedBox(width: 48), // 左側佔位
-                const Expanded(
-                  child: Text(
-                    '建立新活動',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+              child: Row(
+                children: [
+                  const SizedBox(width: 48), // 左側佔位
+                  const Expanded(
+                    child: Text(
+                      '建立新活動',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          // 表單內容
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
+            // 表單內容
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // 活動標題
@@ -602,6 +605,11 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                       controller: _descriptionController,
                       maxLines: 4,
                       maxLength: 100, // 限制 100 個字
+                      textInputAction: TextInputAction.done, // 顯示「完成」按鈕
+                      onEditingComplete: () {
+                        // 按下「完成」時關閉鍵盤
+                        FocusScope.of(context).unfocus();
+                      },
                       decoration: InputDecoration(
                         labelText: '活動說明',
                         hintText: '描述活動內容、注意事項等...',
@@ -875,38 +883,49 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
                       ],
                     ),
                   ],
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // 建立按鈕
-          Container(
-            padding: const EdgeInsets.all(24),
-            child: SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: _createActivity,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00D0DD),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(28),
+            // 建立按鈕
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
                   ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  '建立活動',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                ],
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: _createActivity,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00D0DD),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    '建立活動',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

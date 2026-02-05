@@ -15,14 +15,14 @@ import 'package:flutter/material.dart';
 /// 活動膠囊標記 - 純陰影浮起設計
 /// 
 /// 規格：
-/// - height: 36px (縮小)
-/// - radius: 18px (完全圓角)
+/// - height: 44px (增大以便手機上更容易點擊)
+/// - radius: 22px (完全圓角)
 /// - bg: rgba(255,255,255,0.96)
 /// - border: none（完全移除）
 /// - shadow: 雙層陰影
 ///   - 0 10 24 rgba(0,0,0,0.14)
 ///   - 0 3 8 rgba(0,0,0,0.10)
-/// - anchor dot: 8px（讓 marker 有位置指向）
+/// - anchor dot: 10px（讓 marker 有位置指向）
 class ActivityPillMarker extends StatelessWidget {
   final IconData activityIcon;
   final String title; // 新增：活動標題
@@ -60,7 +60,7 @@ class ActivityPillMarker extends StatelessWidget {
     
     return SizedBox(
       width: 1000, // 提升到 1000px
-      height: 58,
+      height: 66,
       child: Stack(
         alignment: Alignment.center,
         clipBehavior: Clip.none,
@@ -85,18 +85,18 @@ class ActivityPillMarker extends StatelessWidget {
   Widget _buildPillContent(String displayTitle) {
     return PhysicalModel(
       color: Colors.white.withOpacity(0.96),
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(22),
       elevation: 10,
       shadowColor: Colors.black.withOpacity(0.14),
       child: Container(
-        height: 36,
+        height: 44,
         constraints: const BoxConstraints(
-          minWidth: 120,
+          minWidth: 140,
           maxWidth: 1000, // 提升到 1000px
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(22),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -104,26 +104,26 @@ class ActivityPillMarker extends StatelessWidget {
             // LIVE 標籤
             if (isLive) ...[
               _buildLiveChip(),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
             ],
             
             // 活動圖標
             SizedBox(
-              width: 16,
+              width: 20,
               child: Icon(
                 activityIcon,
-                size: 16,
+                size: 20,
                 color: const Color(0xFF00D0DD),
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             
             // 活動標題
             Flexible(
               child: Text(
                 displayTitle,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF2D3436),
                   height: 1.0,
@@ -132,13 +132,13 @@ class ActivityPillMarker extends StatelessWidget {
                 maxLines: 1,
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             
             // 人數顯示
             Text(
               participantCount,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: _getParticipantColor(),
                 height: 1.0,
@@ -153,17 +153,17 @@ class ActivityPillMarker extends StatelessWidget {
   /// LIVE 標籤 - 紅底白字（唯一重點色）
   Widget _buildLiveChip() {
     return Container(
-      height: 20,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      height: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFFF4D4F),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
       ),
       alignment: Alignment.center,
       child: const Text(
         'LIVE',
         style: TextStyle(
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: FontWeight.w600,
           color: Colors.white,
           height: 1.0,
@@ -173,17 +173,17 @@ class ActivityPillMarker extends StatelessWidget {
     );
   }
 
-  /// Anchor dot（定位點）- 8px，無 ripple 光圈
+  /// Anchor dot（定位點）- 10px，無 ripple 光圈
   Widget _buildAnchorDot() {
     return Container(
-      width: 8,
-      height: 8,
+      width: 10,
+      height: 10,
       decoration: BoxDecoration(
         color: const Color(0xFF2D3436), // 深色
         shape: BoxShape.circle,
         border: Border.all(
           color: Colors.white,
-          width: 1.5,
+          width: 2,
         ),
         boxShadow: [
           BoxShadow(
