@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart'; // 新增：用於 MediaType
 import 'package:geocoding/geocoding.dart';
 import '../models/activity.dart';
 import '../config/env_config.dart';
@@ -204,16 +205,26 @@ class ApiService {
       print('URL: $baseUrl/activities/');
       print('Activity Data: $activityData');
       
-      // 如果有照片，使用 multipart/form-data
+      // 使用 multipart/form-data 格式（根據 OpenAPI 規格）
+      print('使用 multipart/form-data 格式');
+      
+      final formData = FormData();
+      
+      // 添加活動資料作為 JSON 字串
+      final activityJson = jsonEncode(activityData);
+      print('Activity JSON: $activityJson');
+      
+      // 嘗試使用 MultipartFile.fromString 來傳遞 JSON
+      formData.files.add(MapEntry(
+        'activity',
+        MultipartFile.fromString(
+          activityJson,
+          contentType: MediaType('application', 'json'),
+        ),
+      ));
+      
+      // 添加照片檔案（如果有）
       if (imagePaths != null && imagePaths.isNotEmpty) {
-        print('使用 multipart/form-data 格式（含照片）');
-        
-        final formData = FormData();
-        
-        // 添加活動資料（JSON 字串）
-        formData.fields.add(MapEntry('activity', jsonEncode(activityData)));
-        
-        // 添加照片檔案
         for (var i = 0; i < imagePaths.length && i < 3; i++) {
           final path = imagePaths[i];
           print('添加照片 ${i + 1}: $path');
@@ -226,39 +237,21 @@ class ApiService {
             ),
           ));
         }
-        
-        final response = await _dio.post(
-          '$baseUrl/activities/',
-          data: formData,
-        );
-        
-        print('✅ 建立活動（含照片）回應: ${response.statusCode}');
-        print('回應資料: ${response.data}');
-        
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          final activity = Activity.fromJson(response.data);
-          print('活動建立成功（含 ${imagePaths.length} 張照片）');
-          print('========== 建立活動成功 ==========\n');
-          return activity;
-        }
-      } else {
-        // 沒有照片，使用 JSON 格式
-        print('使用 JSON 格式（無照片）');
-        
-        final response = await _dio.post(
-          '$baseUrl/activities/',
-          data: activityData,
-        );
-
-        print('✅ 建立活動回應: ${response.statusCode}');
-        print('回應資料: ${response.data}');
-
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          final activity = Activity.fromJson(response.data);
-          print('活動建立成功');
-          print('========== 建立活動成功 ==========\n');
-          return activity;
-        }
+      }
+      
+      final response = await _dio.post(
+        '$baseUrl/activities/',
+        data: formData,
+      );
+      
+      print('✅ 建立活動回應: ${response.statusCode}');
+      print('回應資料: ${response.data}');
+      
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final activity = Activity.fromJson(response.data);
+        print('活動建立成功');
+        print('========== 建立活動成功 ==========\n');
+        return activity;
       }
       
       return null;

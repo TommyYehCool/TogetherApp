@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../services/activity_service.dart';
@@ -160,33 +161,39 @@ class ActivityDetailPanel extends StatelessWidget {
 
                       // 1. 標題 + LIVE/類別 tag（已在上方）
 
-                      // 2. 時間（開始/結束）
+                      // 2. 時間（開始/結束，顯示在同一行）
                       _buildInfoRow(
                         Icons.access_time,
-                        '${DateFormat('MM/dd HH:mm').format(activity.startTime.subtract(const Duration(hours: 8)).toLocal())}',
+                        activity.endTime != null
+                            ? '${DateFormat('MM/dd HH:mm').format(activity.startTime.subtract(const Duration(hours: 8)).toLocal())} 至 ${DateFormat('HH:mm').format(activity.endTime!.subtract(const Duration(hours: 8)).toLocal())}'
+                            : DateFormat('MM/dd HH:mm').format(activity.startTime.subtract(const Duration(hours: 8)).toLocal()),
                       ),
-                      if (activity.endTime != null) ...[
-                        const SizedBox(height: 4),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 32),
-                          child: Text(
-                            '至 ${DateFormat('MM/dd HH:mm').format(activity.endTime!.subtract(const Duration(hours: 8)).toLocal())}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ),
-                      ],
 
                       const SizedBox(height: 12),
 
-                      // 3. 地點（店名或地址，並顯示距離）
-                      _buildInfoRow(
-                        Icons.location_on,
-                        activity.region != null && activity.region!.isNotEmpty
-                            ? '${activity.region} ${activity.address ?? ''}'.trim()
-                            : activity.fullAddress,
+                      // 3. 地點（清理後的地址 + 複製按鈕）
+                      Row(
+                        children: [
+                          Icon(Icons.location_on, size: 20, color: const Color(0xFF00D0DD)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _cleanAddress(activity),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF2D3436),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.copy, size: 18),
+                            color: Colors.grey[600],
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () => _copyAddress(context, _cleanAddress(activity)),
+                            tooltip: '複製地址',
+                          ),
+                        ],
                       ),
 
                       const SizedBox(height: 12),
@@ -380,6 +387,88 @@ class ActivityDetailPanel extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // 清理地址：移除「里」、重新排序區域到前面，並格式化數字
+  String _cleanAddress(Activity activity) {
+    // 檢查地址是否為空或是經緯度格式
+    if (activity.address == null || activity.address!.isEmpty) {
+      return '地址載入中...';
+    }
+    
+    // 檢查是否是經緯度格式（包含小數點和逗號）
+    if (activity.address!.contains('.') && activity.address!.contains(',')) {
+      return '地址載入中...';
+    }
+    
+    // 只讀取一次，避免重複讀取
+    final String originalAddress = activity.address!;
+    String? region = activity.region;
+    
+    String address = originalAddress;
+    
+    // 步驟 0: 如果 region 看起來不像區域（包含逗號或太長），嘗試從地址中提取
+    if (region != null && (region.contains(',') || region.contains('，') || region.length > 10)) {
+      region = null;
+    }
+    
+    // 從地址中提取區域（例如：蘆洲區、中正區）
+    if (region == null || region.isEmpty) {
+      final regionMatch = RegExp(r'([\u4e00-\u9fa5]{2,4}[區市縣])').firstMatch(address);
+      if (regionMatch != null) {
+        region = regionMatch.group(1);
+      }
+    }
+    
+    // 步驟 1: 移除所有包含「里」的詞（例如：水滿里、永安里）
+    address = address.replaceAll(RegExp(r'[\u4e00-\u9fa5]{1,}里'), '');
+    
+    // 步驟 2: 移除所有逗號和多餘空格
+    address = address.replaceAll(RegExp(r'[,，]+'), ' ');
+    address = address.replaceAll(RegExp(r'\s+'), ' ').trim();
+    
+    // 步驟 3: 如果有 region，移除地址中所有的 region（可能重複出現）
+    if (region != null && region.isNotEmpty) {
+      address = address.replaceAll(region, '');
+      address = address.replaceAll(RegExp(r'\s+'), ' ').trim();
+      
+      // 將 region 放到最前面
+      address = '$region $address';
+    }
+    
+    // 步驟 4: 在所有數字和中文之間加空格
+    // 4.1: 中文後面接數字 → 加空格（例如：民權路188 → 民權路 188）
+    address = address.replaceAllMapped(
+      RegExp(r'([\u4e00-\u9fa5])(\d)'),
+      (match) => '${match.group(1)} ${match.group(2)}',
+    );
+    
+    // 4.2: 數字後面接中文 → 加空格（例如：188號 → 188 號，7號 → 7 號）
+    address = address.replaceAllMapped(
+      RegExp(r'(\d)([\u4e00-\u9fa5])'),
+      (match) => '${match.group(1)} ${match.group(2)}',
+    );
+    
+    // 步驟 5: 最終清理：移除多餘空格
+    address = address.replaceAll(RegExp(r'\s+'), ' ').trim();
+    
+    return address;
+  }
+
+  // 複製地址到剪貼簿
+  void _copyAddress(BuildContext context, String address) {
+    // 使用 Flutter 的 Clipboard API
+    final data = ClipboardData(text: address);
+    Clipboard.setData(data);
+    
+    // 顯示提示訊息
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已複製地址：$address'),
+        backgroundColor: const Color(0xFF00D0DD),
+        duration: const Duration(seconds: 2),
       ),
     );
   }

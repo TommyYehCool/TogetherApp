@@ -12,6 +12,7 @@ import '../models/activity.dart';
 import '../widgets/activity_marker_widget.dart';
 import '../widgets/activity_detail_panel.dart';
 import '../widgets/create_activity_dialog.dart';
+import '../utils/marker_size_util.dart';
 import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -155,16 +156,30 @@ class _HomeScreenState extends State<HomeScreen> {
           processedActivityIds.add(activity.id);
           print('  這是選中的活動，直接創建選中標記');
           
-          final markerIcon = await SelectedActivityMarker(
+          final widget = SelectedActivityMarker(
             activityIcon: _getActivityIcon(activity.category),
             title: activity.title,
             participantCount: activity.participantCount,
             isLive: activity.isOngoing,
             isNearlyFull: activity.currentParticipants / activity.maxParticipants >= 0.8,
             isFull: activity.isFull,
-          ).toBitmapDescriptor(
-            logicalSize: const Size(1000, 66), // 與普通標記一致
-            imageSize: const Size(3000, 198), // 3x 高解析度
+          );
+          
+          // 使用文字量測方法計算尺寸
+          final measured = MarkerSizeUtil.measureWithText(
+            title: activity.title,
+            hasLiveChip: activity.isOngoing,
+            context: context,
+            maxWidth: 380,
+          );
+          
+          // 加 padding 避免陰影被裁切
+          final logicalSize = Size(measured.width + 28, measured.height + 20);
+          final imageSize = Size(logicalSize.width * 3, logicalSize.height * 3);
+          
+          final markerIcon = await widget.toBitmapDescriptor(
+            logicalSize: logicalSize,
+            imageSize: imageSize,
           );
           
           newMarkers.add(
@@ -208,11 +223,24 @@ class _HomeScreenState extends State<HomeScreen> {
           }
           
           // 建立 Cluster 膠囊標記
-          final clusterIcon = await ClusterPillMarker(
+          final clusterWidget = ClusterPillMarker(
             count: unprocessedNearby.length,
-          ).toBitmapDescriptor(
-            logicalSize: const Size(100, 58),
-            imageSize: const Size(300, 174), // 3x 高解析度
+          );
+          
+          // Cluster 使用固定尺寸（因為只顯示數字）
+          final measured = MarkerSizeUtil.measure(
+            child: clusterWidget,
+            context: context,
+            maxWidth: 300,
+          );
+          
+          // 加 padding 避免陰影被裁切
+          final logicalSize = Size(measured.width + 24, measured.height + 18);
+          final imageSize = Size(logicalSize.width * 3, logicalSize.height * 3);
+          
+          final clusterIcon = await clusterWidget.toBitmapDescriptor(
+            logicalSize: logicalSize,
+            imageSize: imageSize,
           );
           
           newMarkers.add(
@@ -253,7 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
           }
           
           // 預設狀態：活動膠囊
-          markerIcon = await ActivityPillMarker(
+          final pillWidget = ActivityPillMarker(
             activityIcon: _getActivityIcon(activity.category),
             title: activity.title,
             participantCount: activity.participantCount,
@@ -262,9 +290,23 @@ class _HomeScreenState extends State<HomeScreen> {
             isFull: activity.isFull,
             currentCount: activity.currentParticipants,
             maxCount: activity.maxParticipants,
-          ).toBitmapDescriptor(
-            logicalSize: const Size(1000, 58), // 提升到 1000px
-            imageSize: const Size(3000, 174), // 3x 高解析度
+          );
+          
+          // 使用文字量測方法計算尺寸
+          final measured = MarkerSizeUtil.measureWithText(
+            title: activity.title,
+            hasLiveChip: activity.isOngoing,
+            context: context,
+            maxWidth: 360,
+          );
+          
+          // 加 padding 避免陰影被裁切
+          final logicalSize = Size(measured.width + 24, measured.height + 18);
+          final imageSize = Size(logicalSize.width * 3, logicalSize.height * 3);
+          
+          markerIcon = await pillWidget.toBitmapDescriptor(
+            logicalSize: logicalSize,
+            imageSize: imageSize,
           );
           print('  使用活動膠囊標記');
 
@@ -306,13 +348,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // 處理標記點擊事件
   void _onMarkerTap(Activity tappedActivity) async {
-    // 如果有對話框打開，忽略點擊
-    if (_isPanelOpen) {
-      print('⚠️ 對話框已打開，忽略 Marker 點擊');
+    print('📍 標記被點擊: ${tappedActivity.title} (${tappedActivity.id})');
+    print('   當前選中: $_selectedActivityId');
+    print('   面板狀態: $_isPanelOpen');
+    
+    // 如果點擊的是已選中的活動，忽略（避免重複觸發）
+    if (_selectedActivityId == tappedActivity.id) {
+      print('⚠️ 點擊的是已選中的活動，忽略');
       return;
     }
     
-    // 直接顯示活動詳情（重疊檢測已在 _updateMarkers 中處理）
+    // 如果有對話框打開且點擊的是不同活動，先清除舊的選中狀態
+    if (_isPanelOpen && _selectedActivityId != null) {
+      print('⚠️ 切換到新活動，先清除舊的選中狀態');
+      context.read<ActivityService>().clearSelection();
+      setState(() {
+        _selectedActivityId = null;
+      });
+      await _updateMarkers();
+    }
+    
+    // 顯示活動詳情
+    print('✅ 顯示活動詳情');
     setState(() {
       _selectedActivityId = tappedActivity.id;
     });
@@ -420,7 +477,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               // 標題
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(color: Colors.grey[200]!),
@@ -430,12 +487,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     const Icon(Icons.location_on, color: Color(0xFF00D0DD)),
                     const SizedBox(width: 8),
-                    Text(
-                      '此區域有 ${activities.length} 個活動',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Text(
+                        '此區域有 ${activities.length} 個活動',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
+                    ),
+                    // 關閉按鈕
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      iconSize: 24,
+                      color: Colors.grey[600],
                     ),
                   ],
                 ),
@@ -570,11 +638,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // 當地圖移動時載入新的活動（加入防抖動）
-  Future<void> _onCameraMove(CameraPosition position) async {
+  void _onCameraMove(CameraPosition position) {
     // 更新當前縮放等級
     _currentZoom = position.zoom;
     // 取消之前的計時器
     _debounceTimer?.cancel();
+    
+    // 如果有活動被選中，清除選中狀態（不重新渲染標記，等到 onCameraIdle 時再渲染）
+    if (_selectedActivityId != null) {
+      print('地圖移動，清除選中狀態');
+      context.read<ActivityService>().clearSelection();
+      setState(() {
+        _selectedActivityId = null;
+      });
+      _panelController.close();
+    }
   }
 
   // 當地圖停止移動時載入活動
@@ -648,7 +726,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _isPanelOpen = true; // 設為 true 來禁用所有地圖互動
     });
     
-    final result = await showModalBottomSheet<bool>(
+    final createdActivity = await showModalBottomSheet<Activity>(
       context: context,
       isDismissible: false,
       enableDrag: false,
@@ -660,15 +738,8 @@ class _HomeScreenState extends State<HomeScreen> {
         behavior: HitTestBehavior.opaque, // 關鍵：讓透明區域也能攔截點擊
         child: CreateActivityDialog(
           initialPosition: _currentPosition,
-          onActivityCreated: () async {
-            // 重新載入附近活動
-            await context.read<ActivityService>().loadNearbyActivities(
-              _currentPosition.latitude,
-              _currentPosition.longitude,
-              radiusMeters: 300,
-            );
-            // 更新地圖標記
-            await _updateMarkers();
+          onActivityCreated: () {
+            // 空的回調，實際的重新載入邏輯在外面處理
           },
         ),
       ),
@@ -680,14 +751,50 @@ class _HomeScreenState extends State<HomeScreen> {
       _isPanelOpen = false;
     });
     
-    // 如果成功建立活動，重新載入地圖
-    if (result == true && mounted) {
-      await context.read<ActivityService>().loadNearbyActivities(
-        _currentPosition.latitude,
-        _currentPosition.longitude,
-        radiusMeters: 300,
-      );
+    // 如果成功建立活動，重新載入當前地圖中心的附近活動
+    if (createdActivity != null && mounted) {
+      print('\n========== 活動建立成功 ==========');
+      print('活動標題: ${createdActivity.title}');
+      print('活動 ID: ${createdActivity.id}');
+      
+      // 取得當前地圖中心位置
+      if (_mapController != null) {
+        try {
+          final visibleRegion = await _mapController!.getVisibleRegion();
+          final centerLat = (visibleRegion.northeast.latitude + visibleRegion.southwest.latitude) / 2;
+          final centerLng = (visibleRegion.northeast.longitude + visibleRegion.southwest.longitude) / 2;
+          
+          print('重新載入地圖中心位置的附近活動: ($centerLat, $centerLng)');
+          
+          // 重新載入地圖中心的附近活動（500 公尺範圍）
+          await context.read<ActivityService>().loadNearbyActivities(
+            centerLat,
+            centerLng,
+            radiusMeters: 500,
+          );
+        } catch (e) {
+          print('⚠️ 無法取得地圖中心位置，使用當前位置: $e');
+          // 如果無法取得地圖中心，使用當前位置
+          await context.read<ActivityService>().loadNearbyActivities(
+            _currentPosition.latitude,
+            _currentPosition.longitude,
+            radiusMeters: 500,
+          );
+        }
+      } else {
+        print('使用當前位置重新載入活動');
+        // 如果地圖控制器不可用，使用當前位置
+        await context.read<ActivityService>().loadNearbyActivities(
+          _currentPosition.latitude,
+          _currentPosition.longitude,
+          radiusMeters: 500,
+        );
+      }
+      
+      print('更新地圖標記...');
       await _updateMarkers();
+      
+      print('========== 完成 ==========\n');
     }
   }
 
@@ -718,8 +825,14 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         panel: ActivityDetailPanel(
           onClose: () {
-            // 關閉面板
+            // 關閉面板並清除選中狀態
+            print('關閉活動詳情面板，清除選中狀態');
+            context.read<ActivityService>().clearSelection();
+            setState(() {
+              _selectedActivityId = null;
+            });
             _panelController.close();
+            _updateMarkers(); // 重新渲染標記以顯示所有活動
           },
         ),
         onPanelSlide: (position) {
@@ -743,12 +856,13 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         onPanelClosed: () {
           // 面板關閉時，清除選中狀態，恢復 cluster 顯示
+          print('面板已關閉（滑動關閉），清除選中狀態');
           setState(() => _isPanelOpen = false);
           if (_selectedActivityId != null) {
+            context.read<ActivityService>().clearSelection();
             setState(() {
               _selectedActivityId = null;
             });
-            context.read<ActivityService>().selectActivity(null);
             _updateMarkers(); // 重新渲染標記
           }
         },
@@ -774,10 +888,20 @@ class _HomeScreenState extends State<HomeScreen> {
               zoomGesturesEnabled: _isMapGesturesEnabled,
               tiltGesturesEnabled: _isMapGesturesEnabled,
               rotateGesturesEnabled: _isMapGesturesEnabled,
-              // 攔截地圖點擊，防止 POI 彈窗
+              // 點擊地圖空白處：關閉面板並清除選中狀態
               onTap: (LatLng position) {
                 print('地圖被點擊: $position');
-                // 不做任何事，阻止 POI 彈窗
+                
+                // 如果有活動被選中，清除選中狀態
+                if (context.read<ActivityService>().selectedActivity != null) {
+                  print('清除選中的活動');
+                  context.read<ActivityService>().clearSelection();
+                  setState(() {
+                    _selectedActivityId = null;
+                  });
+                  _panelController.close();
+                  _updateMarkers(); // 重新渲染標記
+                }
               },
             ),
 

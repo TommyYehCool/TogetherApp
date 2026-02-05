@@ -51,6 +51,12 @@ class ActivityService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 清除選中的活動
+  void clearSelection() {
+    _selectedActivity = null;
+    notifyListeners();
+  }
+
   // 申請加入活動
   Future<Map<String, dynamic>> joinActivity(String activityId) async {
     _isLoading = true;

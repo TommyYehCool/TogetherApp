@@ -12,17 +12,17 @@ import 'package:flutter/material.dart';
 // 1. 活動膠囊標記（主要標記）- 無邊框版本
 // ============================================================
 
-/// 活動膠囊標記 - 純陰影浮起設計
+/// 活動膠囊標記 - 純陰影浮起設計（與 Google Maps 地標同等大小）
 /// 
 /// 規格：
-/// - height: 44px (增大以便手機上更容易點擊)
-/// - radius: 22px (完全圓角)
+/// - height: 56px (與 Google Maps 地標相當)
+/// - radius: 28px (完全圓角)
 /// - bg: rgba(255,255,255,0.96)
 /// - border: none（完全移除）
 /// - shadow: 雙層陰影
 ///   - 0 10 24 rgba(0,0,0,0.14)
 ///   - 0 3 8 rgba(0,0,0,0.10)
-/// - anchor dot: 10px（讓 marker 有位置指向）
+/// - anchor dot: 12px（讓 marker 有位置指向）
 class ActivityPillMarker extends StatelessWidget {
   final IconData activityIcon;
   final String title; // 新增：活動標題
@@ -59,8 +59,7 @@ class ActivityPillMarker extends StatelessWidget {
     }
     
     return SizedBox(
-      width: 1000, // 提升到 1000px
-      height: 66,
+      height: 80,
       child: Stack(
         alignment: Alignment.center,
         clipBehavior: Clip.none,
@@ -83,62 +82,53 @@ class ActivityPillMarker extends StatelessWidget {
 
   /// 建立膠囊內容（純陰影，無邊框）
   Widget _buildPillContent(String displayTitle) {
+    const double height = 56.0;
+    const double radius = height / 2; // 圓角半徑 = 高度的一半 = 28
+    
     return PhysicalModel(
       color: Colors.white.withOpacity(0.96),
-      borderRadius: BorderRadius.circular(22),
-      elevation: 10,
-      shadowColor: Colors.black.withOpacity(0.14),
+      borderRadius: BorderRadius.circular(radius),
+      elevation: 12,
+      shadowColor: Colors.black.withOpacity(0.16),
+      clipBehavior: Clip.antiAlias, // 確保圓角正確裁切
       child: Container(
-        height: 44,
-        constraints: const BoxConstraints(
-          minWidth: 140,
-          maxWidth: 1000, // 提升到 1000px
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-        ),
+        height: height,
+        // 不設定固定寬度，讓內容自動決定
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), // 減少左右內邊距：18 → 14
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min, // 改回 min，根據內容調整
           children: [
             // LIVE 標籤
             if (isLive) ...[
               _buildLiveChip(),
-              const SizedBox(width: 8),
+              const SizedBox(width: 8), // 減少間距：10 → 8
             ],
             
             // 活動圖標
-            SizedBox(
-              width: 20,
-              child: Icon(
-                activityIcon,
-                size: 20,
-                color: const Color(0xFF00D0DD),
-              ),
+            Icon(
+              activityIcon,
+              size: 26,
+              color: const Color(0xFF00D0DD),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 8), // 減少間距：10 → 8
             
             // 活動標題
-            Flexible(
-              child: Text(
-                displayTitle,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF2D3436),
-                  height: 1.0,
-                ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
+            Text(
+              displayTitle,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF2D3436),
+                height: 1.0,
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 6), // 減少間距：8 → 6
             
             // 人數顯示
             Text(
               participantCount,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: _getParticipantColor(),
                 height: 1.0,
@@ -153,17 +143,17 @@ class ActivityPillMarker extends StatelessWidget {
   /// LIVE 標籤 - 紅底白字（唯一重點色）
   Widget _buildLiveChip() {
     return Container(
-      height: 24,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: const Color(0xFFFF4D4F),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
       ),
       alignment: Alignment.center,
       child: const Text(
         'LIVE',
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 13,
           fontWeight: FontWeight.w600,
           color: Colors.white,
           height: 1.0,
@@ -173,22 +163,22 @@ class ActivityPillMarker extends StatelessWidget {
     );
   }
 
-  /// Anchor dot（定位點）- 10px，無 ripple 光圈
+  /// Anchor dot（定位點）- 12px，無 ripple 光圈
   Widget _buildAnchorDot() {
     return Container(
-      width: 10,
-      height: 10,
+      width: 12,
+      height: 12,
       decoration: BoxDecoration(
         color: const Color(0xFF2D3436), // 深色
         shape: BoxShape.circle,
         border: Border.all(
           color: Colors.white,
-          width: 2,
+          width: 2.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.18),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
             offset: const Offset(0, 3),
           ),
         ],
@@ -225,8 +215,8 @@ class ClusterPillMarker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 100,
-      height: 58,
+      width: 400, // 放大兩倍：200 → 400
+      height: 160, // 放大兩倍：80 → 160
       child: Stack(
         alignment: Alignment.center,
         clipBehavior: Clip.none,
@@ -239,7 +229,7 @@ class ClusterPillMarker extends StatelessWidget {
           
           // 膠囊內容
           Positioned(
-            top: 6,
+            top: 12, // 調整位置：6 → 12
             child: _buildPillContent(),
           ),
         ],
@@ -250,14 +240,14 @@ class ClusterPillMarker extends StatelessWidget {
   Widget _buildPillContent() {
     return PhysicalModel(
       color: Colors.white.withOpacity(0.96),
-      borderRadius: BorderRadius.circular(18),
-      elevation: 10,
-      shadowColor: Colors.black.withOpacity(0.14),
+      borderRadius: BorderRadius.circular(28),
+      elevation: 12,
+      shadowColor: Colors.black.withOpacity(0.16),
       child: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(28),
           // 無邊框
         ),
         child: Row(
@@ -266,15 +256,15 @@ class ClusterPillMarker extends StatelessWidget {
             // 堆疊圖標
             Icon(
               Icons.layers,
-              size: 15,
+              size: 24,
               color: const Color(0xFF00D0DD),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 10),
             // 文字
             Text(
               '$count 個活動',
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF2D3436),
                 height: 1.0,
@@ -288,19 +278,19 @@ class ClusterPillMarker extends StatelessWidget {
 
   Widget _buildAnchorDot() {
     return Container(
-      width: 8,
-      height: 8,
+      width: 12,
+      height: 12,
       decoration: BoxDecoration(
         color: const Color(0xFF2D3436),
         shape: BoxShape.circle,
         border: Border.all(
           color: Colors.white,
-          width: 1.5,
+          width: 2.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.18),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
             offset: const Offset(0, 3),
           ),
         ],
@@ -314,8 +304,8 @@ class ClusterPillMarker extends StatelessWidget {
 // ============================================================
 
 /// 選中狀態的活動標記
-/// scale: 1.04
-/// shadow: 加深（0 14 30 rgba(0,0,0,0.18) + 0 4 12 rgba(0,0,0,0.12)）
+/// scale: 1.06
+/// shadow: 加深（0 16 36 rgba(0,0,0,0.20) + 0 4 12 rgba(0,0,0,0.12)）
 /// 不加任何外框、不加任何 halo、不加青色效果
 class SelectedActivityMarker extends StatelessWidget {
   final IconData activityIcon;
@@ -348,8 +338,7 @@ class SelectedActivityMarker extends StatelessWidget {
     }
     
     return SizedBox(
-      width: 1000, // 與普通標記一致
-      height: 66,
+      height: 88,
       child: Stack(
         alignment: Alignment.center,
         clipBehavior: Clip.none,
@@ -360,11 +349,11 @@ class SelectedActivityMarker extends StatelessWidget {
             child: _buildAnchorDot(),
           ),
           
-          // 膠囊內容（放大 1.04 倍）
+          // 膠囊內容（放大 1.06 倍）
           Positioned(
             top: 5,
             child: Transform.scale(
-              scale: 1.04,
+              scale: 1.06,
               child: _buildPillContent(displayTitle),
             ),
           ),
@@ -374,45 +363,41 @@ class SelectedActivityMarker extends StatelessWidget {
   }
 
   Widget _buildPillContent(String displayTitle) {
+    const double height = 56.0;
+    const double radius = height / 2; // 圓角半徑 = 高度的一半 = 28
+    
     return PhysicalModel(
       color: Colors.white.withOpacity(0.96),
-      borderRadius: BorderRadius.circular(22),
-      elevation: 14, // 加深陰影：0 14 30 rgba(0,0,0,0.18)
-      shadowColor: Colors.black.withOpacity(0.18),
+      borderRadius: BorderRadius.circular(radius),
+      elevation: 16, // 加深陰影：0 16 36 rgba(0,0,0,0.20)
+      shadowColor: Colors.black.withOpacity(0.20),
+      clipBehavior: Clip.antiAlias, // 確保圓角正確裁切
       child: Container(
-        height: 44,
-        constraints: const BoxConstraints(
-          minWidth: 120,
-          maxWidth: 1000, // 與普通標記一致
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          // 完全無邊框、無 halo、無青色效果
-        ),
+        height: height,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), // 減少左右內邊距：18 → 14
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             // LIVE 標籤
             if (isLive) ...[
               _buildLiveChip(),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8), // 減少間距：10 → 8
             ],
             
             // 活動圖標
             Icon(
               activityIcon,
-              size: 18,
+              size: 26,
               color: const Color(0xFF00D0DD),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8), // 減少間距：10 → 8
             
             // 標題
             Flexible(
               child: Text(
                 displayTitle,
                 style: const TextStyle(
-                  fontSize: 13,
+                  fontSize: 16,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF2D3436),
                   height: 1.0,
@@ -421,13 +406,13 @@ class SelectedActivityMarker extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 6), // 減少間距：8 → 6
             
             // 人數
             Text(
               participantCount,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: _getParticipantColor(),
                 height: 1.0,
@@ -441,17 +426,17 @@ class SelectedActivityMarker extends StatelessWidget {
 
   Widget _buildLiveChip() {
     return Container(
-      height: 20,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: const Color(0xFFFF4D4F),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(14),
       ),
       alignment: Alignment.center,
       child: const Text(
         'LIVE',
         style: TextStyle(
-          fontSize: 10,
+          fontSize: 13,
           fontWeight: FontWeight.w600,
           color: Colors.white,
           height: 1.0,
@@ -463,20 +448,20 @@ class SelectedActivityMarker extends StatelessWidget {
 
   Widget _buildAnchorDot() {
     return Container(
-      width: 10, // 稍微放大
-      height: 10,
+      width: 14, // 稍微放大
+      height: 14,
       decoration: BoxDecoration(
         color: const Color(0xFF2D3436),
         shape: BoxShape.circle,
         border: Border.all(
           color: Colors.white,
-          width: 2,
+          width: 3,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            color: Colors.black.withOpacity(0.24),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),

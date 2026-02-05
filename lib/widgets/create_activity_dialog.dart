@@ -96,16 +96,55 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
         print('  country: ${place.country}');
         print('  isoCountryCode: ${place.isoCountryCode}');
         
-        // 組合完整地址
+        // 組合地址：只顯示「區 + 街道門牌」，完全移除「里」
         String fullAddress = '';
+        
+        // 1. 取得行政區（例如：蘆洲區）
+        String district = '';
+        if (place.subAdministrativeArea != null && place.subAdministrativeArea!.isNotEmpty) {
+          district = place.subAdministrativeArea!;
+        } else if (place.locality != null && place.locality!.isNotEmpty) {
+          district = place.locality!;
+        }
+        
+        // 2. 處理街道地址
+        String street = '';
         if (place.street != null && place.street!.isNotEmpty) {
-          fullAddress = place.street!;
+          street = place.street!;
+          
+          print('原始街道: $street');
+          
+          // 步驟 1: 移除所有「里」相關資訊（包括前後的逗號、空格）
+          // 匹配：中文字+里，以及後面可能的逗號、空格
+          street = street.replaceAllMapped(
+            RegExp(r'[,，\s]*[\u4e00-\u9fa5]+里[,，\s]*'),
+            (match) {
+              print('移除: "${match.group(0)}"');
+              return '';
+            },
+          );
+          
+          // 步驟 2: 移除可能重複的區域名稱（避免「蘆洲區蘆洲區」）
+          if (district.isNotEmpty) {
+            street = street.replaceAll(district, '');
+          }
+          
+          // 步驟 3: 清理多餘的逗號、空格
+          street = street
+              .replaceAll(RegExp(r'[,，\s]+'), ' ') // 將多個逗號/空格替換為單一空格
+              .replaceAll(RegExp(r'^\s+|\s+$'), '') // 移除首尾空格
+              .trim();
+          
+          print('處理後街道: $street');
         }
-        if (place.subLocality != null && place.subLocality!.isNotEmpty) {
-          fullAddress = fullAddress.isEmpty ? place.subLocality! : '$fullAddress, ${place.subLocality}';
-        }
-        if (place.locality != null && place.locality!.isNotEmpty) {
-          fullAddress = fullAddress.isEmpty ? place.locality! : '$fullAddress, ${place.locality}';
+        
+        // 3. 組合最終地址：區 + 街道
+        if (district.isNotEmpty && street.isNotEmpty) {
+          fullAddress = '$district$street';
+        } else if (district.isNotEmpty) {
+          fullAddress = district;
+        } else if (street.isNotEmpty) {
+          fullAddress = street;
         }
         
         // 如果還是空的，使用行政區域
@@ -485,7 +524,7 @@ class _CreateActivityDialogState extends State<CreateActivityDialog> {
         );
         
         widget.onActivityCreated();
-        Navigator.pop(context); // 關閉建立對話框
+        Navigator.pop(context, activity); // 關閉建立對話框，返回建立的活動
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
